@@ -1,0 +1,19 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api, apiMessage } from '../../api/client.js';
+import { formatDate, formatMoney } from '../utils/format.js';
+import { EmptyState, LinkButton, LoadingBlock, Notice, PageHeader, StatusBadge } from '../components/UI.jsx';
+
+export default function DashboardPage() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [currency, setCurrency] = useState('NGN');
+  useEffect(() => { api.get('/dashboard').then(({ data: value }) => { setData(value); if (value.metrics.length && !value.metrics.some((metric) => metric.currency === 'NGN')) setCurrency(value.metrics[0].currency); }).catch((requestError) => setError(apiMessage(requestError))); }, []);
+  const primary = data?.metrics?.find((metric) => metric.currency === currency) || { currency, invoiced: 0, received: 0, outstanding: 0 };
+
+  return <><PageHeader eyebrow="Overview" title="Your finance desk" description="A precise view of invoices, payments, and what still needs attention." actions={<><select className="currency-switcher" aria-label="Dashboard currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>{['NGN', 'USD', 'GBP'].map((item) => <option key={item}>{item}</option>)}</select><LinkButton to="/finance/receipts/new" variant="secondary">+ New receipt</LinkButton><LinkButton to="/finance/invoices/new">+ New invoice</LinkButton></>} /><Notice>{error}</Notice>{!data ? <LoadingBlock /> : <>
+    <section className="metric-grid"><article><span>Total invoiced</span><strong>{formatMoney(primary.invoiced, primary.currency)}</strong><small>{primary.currency} documents</small></article><article><span>Total received</span><strong>{formatMoney(primary.received, primary.currency)}</strong><small>Confirmed payments</small></article><article className="metric-accent"><span>Outstanding</span><strong>{formatMoney(primary.outstanding, primary.currency)}</strong><small>Across open invoices</small></article><article><span>Unpaid invoices</span><strong>{data.unpaidCount}</strong><small>Sent or partially paid</small></article></section>
+    <div className="dashboard-grid"><section className="panel"><div className="panel-head"><div><span className="eyebrow">Activity</span><h2>Recent invoices</h2></div><Link to="/finance/invoices">View all →</Link></div>{data.recentInvoices.length ? <div className="responsive-table"><table><thead><tr><th>Invoice</th><th>Client</th><th>Amount</th><th>Due</th><th>Status</th></tr></thead><tbody>{data.recentInvoices.map((invoice) => <tr key={invoice.publicId}><td><Link to={`/finance/invoices/${invoice.publicId}`}>{invoice.number}</Link></td><td>{invoice.client?.name}</td><td>{formatMoney(invoice.total, invoice.currency)}</td><td>{formatDate(invoice.dueDate)}</td><td><StatusBadge status={invoice.displayStatus} /></td></tr>)}</tbody></table></div> : <EmptyState title="No invoices yet" body="Create your first invoice to start tracking payments." action="Create invoice" to="/finance/invoices/new" />}</section>
+    <section className="panel recent-receipts"><div className="panel-head"><div><span className="eyebrow">Incoming</span><h2>Recent receipts</h2></div><Link to="/finance/receipts">View all →</Link></div>{data.recentReceipts.length ? <div className="receipt-list">{data.recentReceipts.map((receipt) => <Link to={`/finance/receipts/${receipt.publicId}`} key={receipt.publicId}><span className="receipt-mini-mark">R</span><span><strong>{receipt.client?.name}</strong><small>{receipt.number} · {formatDate(receipt.paymentDate)}</small></span><b>{formatMoney(receipt.amount, receipt.currency || receipt.invoice?.currency || 'NGN')}</b></Link>)}</div> : <EmptyState title="No receipts yet" body="Receipts will appear here when payments arrive." action="New receipt" to="/finance/receipts/new" />}</section></div>
+  </>}</>;
+}

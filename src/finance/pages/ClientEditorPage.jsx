@@ -1,0 +1,13 @@
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { api, apiMessage } from '../../api/client.js';
+import { Button, Field, LinkButton, LoadingBlock, Notice, PageHeader } from '../components/UI.jsx';
+
+const empty = { name: '', company: '', email: '', phone: '', address: '', notes: '' };
+export default function ClientEditorPage() {
+  const { publicId } = useParams(); const editing = Boolean(publicId); const [form, setForm] = useState(empty); const [loading, setLoading] = useState(editing); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const navigate = useNavigate();
+  useEffect(() => { if (editing) api.get(`/clients/${publicId}`).then(({ data }) => setForm(Object.fromEntries(Object.keys(empty).map((key) => [key, data.client[key] || ''])))).catch((requestError) => setError(apiMessage(requestError))).finally(() => setLoading(false)); }, [editing, publicId]);
+  const change = (key) => (event) => setForm({ ...form, [key]: event.target.value });
+  async function submit(event) { event.preventDefault(); setBusy(true); setError(''); try { const { data } = editing ? await api.put(`/clients/${publicId}`, form) : await api.post('/clients', form); navigate(`/finance/clients/${data.client.publicId}`); } catch (requestError) { setError(apiMessage(requestError)); } finally { setBusy(false); } }
+  return <><PageHeader eyebrow="Client record" title={editing ? 'Edit client' : 'New client'} description="Contact information is reused across invoices and receipts." actions={<LinkButton to={editing ? `/finance/clients/${publicId}` : '/finance/clients'} variant="ghost">Cancel</LinkButton>} />{loading ? <LoadingBlock /> : <form className="editor-card narrow-editor" onSubmit={submit}><Notice>{error}</Notice><div className="form-grid"><Field label="Client name"><input value={form.name} onChange={change('name')} maxLength="160" required /></Field><Field label="Company (optional)"><input value={form.company} onChange={change('company')} maxLength="160" /></Field><Field label="Email"><input type="email" value={form.email} onChange={change('email')} /></Field><Field label="Phone"><input value={form.phone} onChange={change('phone')} /></Field><Field label="Address"><textarea rows="4" value={form.address} onChange={change('address')} /></Field><Field label="Internal notes"><textarea rows="4" value={form.notes} onChange={change('notes')} /></Field></div><div className="form-actions"><Button type="submit" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create client'}</Button></div></form>}</>;
+}

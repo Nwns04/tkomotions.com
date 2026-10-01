@@ -1,0 +1,16 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { api, apiMessage, downloadPdf } from '../../api/client.js';
+import { formatDate, formatMoney } from '../utils/format.js';
+import { Button, LoadingBlock, Notice, PageHeader, StatusBadge } from '../components/UI.jsx';
+import { ReceiptPreview } from '../components/DocumentPreview.jsx';
+
+export default function ReceiptDetailPage() {
+  const { publicId } = useParams(); const [receipt, setReceipt] = useState(null); const [settings, setSettings] = useState({}); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const load = useCallback(() => Promise.all([api.get(`/receipts/${publicId}`), api.get('/settings')]).then(([receiptResponse, settingsResponse]) => { setReceipt(receiptResponse.data.receipt); setSettings(settingsResponse.data.settings); }).catch((requestError) => setError(apiMessage(requestError))), [publicId]);
+  useEffect(() => { load(); }, [load]);
+  async function cancel() { if (!window.confirm('Cancel this receipt? It will remain visible in financial history.')) return; setBusy(true); try { await api.post(`/receipts/${publicId}/cancel`); await load(); } catch (requestError) { setError(apiMessage(requestError)); } finally { setBusy(false); } }
+  if (!receipt) return <><PageHeader eyebrow="Receipt" title="Loading document" /><Notice>{error}</Notice><LoadingBlock /></>;
+  const currency = receipt.currency || receipt.invoice?.currency || settings.defaultCurrency || 'NGN';
+  return <><PageHeader eyebrow="Receipt" title={receipt.number} description={`${receipt.client.name} · Received ${formatDate(receipt.paymentDate)}`} actions={<div className="action-wrap"><Button variant="secondary" onClick={() => window.print()}>Print</Button><Button onClick={() => downloadPdf(`/receipts/${publicId}/pdf`, `${receipt.number}.pdf`).catch((requestError) => setError(apiMessage(requestError)))}>Download PDF</Button></div>} /><Notice>{error}</Notice><div className="detail-summary"><div><span>Status</span><StatusBadge status={receipt.status} /></div><div><span>Amount received</span><strong>{formatMoney(receipt.amount, currency)}</strong></div><div><span>Method</span><strong>{receipt.method}</strong></div><div><span>Reference</span><strong>{receipt.reference || '—'}</strong></div></div><div className="document-detail-grid"><section className="document-stage"><ReceiptPreview receipt={receipt} settings={settings} /></section><aside className="detail-sidebar"><section className="panel"><span className="eyebrow">Record details</span><dl className="record-list"><div><dt>Client</dt><dd><Link to={`/finance/clients/${receipt.client.publicId}`}>{receipt.client.name}</Link></dd></div>{receipt.invoice && <div><dt>Invoice</dt><dd><Link to={`/finance/invoices/${receipt.invoice.publicId}`}>{receipt.invoice.number}</Link></dd></div>}<div><dt>Created</dt><dd>{formatDate(receipt.createdAt)}</dd></div></dl></section>{receipt.status === 'Valid' && <section className="panel danger-zone"><h2>Financial record</h2><p>Receipts are never silently deleted. Cancellation preserves the document in history.</p><Button variant="danger" disabled={busy} onClick={cancel}>{busy ? 'Cancelling…' : 'Cancel receipt'}</Button></section>}</aside></div></>;
+}

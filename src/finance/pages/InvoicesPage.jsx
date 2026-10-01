@@ -1,0 +1,12 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api, apiMessage } from '../../api/client.js';
+import { formatDate, formatMoney } from '../utils/format.js';
+import { EmptyState, LinkButton, LoadingBlock, Notice, PageHeader, StatusBadge } from '../components/UI.jsx';
+
+const statuses = ['', 'Draft', 'Sent', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'];
+export default function InvoicesPage() {
+  const [invoices, setInvoices] = useState(null); const [search, setSearch] = useState(''); const [status, setStatus] = useState(''); const [error, setError] = useState('');
+  useEffect(() => { const timer = setTimeout(() => api.get('/invoices', { params: { search, status } }).then(({ data }) => setInvoices(data.invoices)).catch((requestError) => setError(apiMessage(requestError))), 200); return () => clearTimeout(timer); }, [search, status]);
+  return <><PageHeader eyebrow="Documents" title="Invoices" description="Draft, send, and track every invoice through payment." actions={<LinkButton to="/finance/invoices/new">+ New invoice</LinkButton>} /><Notice>{error}</Notice><div className="toolbar"><div className="search-box">⌕<input aria-label="Search invoices" placeholder="Search invoice or client" value={search} onChange={(e) => setSearch(e.target.value)} /></div><select aria-label="Filter invoices by status" value={status} onChange={(e) => setStatus(e.target.value)}>{statuses.map((item) => <option key={item} value={item}>{item || 'All statuses'}</option>)}</select></div>{invoices === null ? <LoadingBlock /> : invoices.length ? <section className="panel table-panel"><div className="responsive-table"><table><thead><tr><th>Invoice</th><th>Client</th><th>Issued</th><th>Due</th><th>Amount</th><th>Balance</th><th>Status</th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.publicId}><td><Link to={`/finance/invoices/${invoice.publicId}`}>{invoice.number}</Link></td><td>{invoice.client?.name}</td><td>{formatDate(invoice.issueDate)}</td><td>{formatDate(invoice.dueDate)}</td><td>{formatMoney(invoice.total, invoice.currency)}</td><td>{formatMoney(invoice.balance, invoice.currency)}</td><td><StatusBadge status={invoice.displayStatus} /></td></tr>)}</tbody></table></div></section> : <EmptyState title="No invoices found" body={search || status ? 'Adjust your search or filters.' : 'Create the first invoice for your TKO Finance workspace.'} action={!search && !status ? 'Create invoice' : null} to="/finance/invoices/new" />}</>;
+}

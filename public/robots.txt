@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /finance/
+
+Sitemap: https://tkomotions.com/sitemap.xml

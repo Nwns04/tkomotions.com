@@ -3,7 +3,8 @@ import type { AIInput } from '../ai';
 import { connectToDatabase } from '../db/connection';
 import { AgentAction, Appointment, Conversation, Lead, Message } from '../db/models';
 import { DEMO_FALLBACK_MESSAGE } from '../demo-engine';
-import { ensureDemoBusiness, findDemoKnowledge, listDemoProperties, searchDemoKnowledge } from './demo-business';
+import { DEMO_SERVICE_ERROR_MESSAGE, resolveDemoQuery } from '../demo-context';
+import { ensureDemoBusiness, findDemoKnowledge, getDemoKnowledge, listDemoProperties, searchDemoKnowledge } from './demo-business';
 import { scoreSalesLead, type LeadScoreInput } from './lead-scoring';
 import { notifyQualifiedLead } from './lead-notification';
 
@@ -37,7 +38,7 @@ function isPropertyRecommendationRequest(content: string) {
 }
 
 function isPropertyPricingRequest(content: string) {
-  return /\b(pricing|prices?|costs?)\b/i.test(content);
+  return /\b(pricing|prices?|costs?)\b|how much/i.test(content);
 }
 
 function isAgentRequest(content: string) {
@@ -81,20 +82,22 @@ export async function replyToDemoVisitor(visitorKey: string, content: string, on
     return sendImmediateReply(reply, 'human_handoff');
   }
 
-  const propertyBrowseRequest = isPropertyBrowseRequest(content);
-  const propertyPricingRequest = isPropertyPricingRequest(content);
-  const propertyRecommendationRequest = isPropertyRecommendationRequest(content);
+  const recent = await Message.find({ conversationId: conversation._id }).sort({ createdAt: -1, _id: -1 }).limit(13).lean();
+  const query = resolveDemoQuery(content, recent.slice(1).reverse());
+  const propertyBrowseRequest = isPropertyBrowseRequest(query);
+  const propertyPricingRequest = isPropertyPricingRequest(query);
+  const propertyRecommendationRequest = isPropertyRecommendationRequest(query);
   const policyRequest = isInspectionPolicyRequest(content);
   const matches = propertyBrowseRequest || propertyPricingRequest || propertyRecommendationRequest
     ? await listDemoProperties(business._id)
     : policyRequest
       ? await findDemoKnowledge(business._id, /inspection|payment|business hours/i)
-      : await searchDemoKnowledge(business._id, content);
+      : await searchDemoKnowledge(business._id, query);
 
   if (propertyBrowseRequest || propertyPricingRequest || propertyRecommendationRequest) {
     const location = matches
       .map((match) => match.content.match(/Location:\s*([^.]+)/i)?.[1]?.trim())
-      .find((candidate) => candidate && new RegExp(`\\b${candidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(content));
+      .find((candidate) => candidate && new RegExp(`\\b${candidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(query));
     const relevantMatches = location
       ? matches.filter((match) => match.content.toLowerCase().includes(`location: ${location.toLowerCase()}`))
       : matches;
@@ -128,13 +131,14 @@ export async function replyToDemoVisitor(visitorKey: string, content: string, on
   const knowledgeAction = AgentAction.create({ businessId: business._id, conversationId: conversation._id, actionType: 'search_knowledge', status: 'SUCCESS', payload: { query: content.slice(0, 500) }, result: `${matches.length} approved knowledge matches` });
   let streamedContent = '';
   try {
-    const recent = await Message.find({ conversationId: conversation._id }).sort({ createdAt: -1 }).limit(12).lean();
+    // Include the complete small demo catalog to support natural phrasing and follow-ups.
+    const approvedKnowledge = await getDemoKnowledge(business._id);
     const provider = createAIProvider();
     const input: AIInput = {
       temperature: 0.2,
       messages: [
-        { role: 'system', content: systemPrompt(matches.map((match) => match.content).join('\n')) },
-        ...recent.reverse().map((message) => ({ role: message.role === 'customer' ? 'user' as const : 'assistant' as const, content: message.content })),
+        { role: 'system', content: systemPrompt(approvedKnowledge.map((match) => match.content).join('\n')) },
+        ...recent.slice(0, 12).reverse().map((message) => ({ role: message.role === 'customer' ? 'user' as const : 'assistant' as const, content: message.content })),
       ],
     };
     const response = provider.generateResponseStream
@@ -144,8 +148,9 @@ export async function replyToDemoVisitor(visitorKey: string, content: string, on
       })
       : await provider.generateResponse(input);
     const generatedReply = response.content.trim();
-    const reply = generatedReply || DEMO_FALLBACK_MESSAGE;
-    if (!provider.generateResponseStream || (!generatedReply && !streamedContent)) {
+    if (!generatedReply) throw new Error('AI provider returned an empty demo response.');
+    const reply = generatedReply;
+    if (!provider.generateResponseStream) {
       streamedContent = reply;
       onEvent?.({ type: 'text', text: reply });
     }
@@ -157,9 +162,9 @@ export async function replyToDemoVisitor(visitorKey: string, content: string, on
   } catch (error) {
     console.error('[sales-engine] demo workflow failed', error);
     const reply = streamedContent
-      ? `${streamedContent.trimEnd()}\n\n${DEMO_FALLBACK_MESSAGE}`
-      : DEMO_FALLBACK_MESSAGE;
-    if (onEvent) onEvent({ type: 'text', text: streamedContent ? `\n\n${DEMO_FALLBACK_MESSAGE}` : reply });
+      ? `${streamedContent.trimEnd()}\n\n${DEMO_SERVICE_ERROR_MESSAGE}`
+      : DEMO_SERVICE_ERROR_MESSAGE;
+    if (onEvent) onEvent({ type: 'text', text: streamedContent ? `\n\n${DEMO_SERVICE_ERROR_MESSAGE}` : reply });
     await Promise.all([
       Message.create({ businessId: business._id, conversationId: conversation._id, role: 'assistant', content: reply }),
       knowledgeAction,

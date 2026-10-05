@@ -53,15 +53,19 @@ export async function ensureDemoBusiness() {
   return demoBusinessPromise;
 }
 
-async function getDemoKnowledge(businessId: unknown) {
+export async function getDemoKnowledge(businessId: unknown) {
   const id = String(businessId);
   if (knowledgeCache?.businessId === id && knowledgeCache.expiresAt > Date.now()) {
     return knowledgeCache.chunks;
   }
 
-  const chunks = await KnowledgeChunk.find({ businessId })
+  let chunks: Array<{ content: string }> = await KnowledgeChunk.find({ businessId })
     .select('content')
     .lean();
+  // A previous seed may have saved documents before chunk insertion failed.
+  if (!chunks.length) {
+    chunks = await KnowledgeDocument.find({ businessId, status: 'ACTIVE' }).select('content').lean();
+  }
   knowledgeCache = { businessId: id, expiresAt: Date.now() + 30_000, chunks };
   return chunks;
 }

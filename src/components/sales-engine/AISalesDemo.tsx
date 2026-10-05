@@ -166,7 +166,7 @@ export function AISalesDemo() {
         const assistantMessage: DemoMessage = {
           role: 'assistant',
           content: reply,
-          showLeadLink: shouldOfferLeadForm(trimmed),
+          showLeadLink: shouldOfferLeadForm(trimmed) || /having trouble answering/i.test(reply),
           ...(properties.length ? { properties } : {}),
         };
         setMessages((current) => {

@@ -9,7 +9,9 @@
     "dev:web": "next dev -p 5173",
     "dev:api": "nodemon --watch server server/server.js",
     "build": "velite build && next build",
+    "build:backend": "node --check server/app.js && node --check server/server.js",
     "start": "node server/production.js",
+    "start:backend": "node server/server.js",
     "lint": "eslint .",
     "create-admin": "node server/scripts/createAdmin.js",
     "test": "node server/services/invoiceMath.test.js && node server/services/quotationCopy.test.js && node server/services/ai/provider.test.js && node server/services/ai/attestation.test.js && node --test server/services/demoLead.test.js && node --test server/services/demoWorkflow.test.js"

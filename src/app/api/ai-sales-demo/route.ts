@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { DEMO_SERVICE_ERROR_MESSAGE, resolveDemoQuery, type DemoContextTurn } from '@/sales-engine/demo-context';
+import { DEMO_SERVICE_ERROR_MESSAGE, type DemoContextTurn } from '@/sales-engine/demo-context';
+import { getDemoSalesReply, getDemoGuidance, sendDemoSalesReply } from '@/sales-engine/demo-sales-flow';
 import { captureDemoLead, replyToDemoVisitor, type DemoStreamEvent } from '@/sales-engine/services/conversation-workflow';
 
 const demoMessageSchema = z.object({
@@ -28,64 +29,16 @@ const leadSchema = z.object({
   timeline: z.string().trim().max(120).optional().default(''),
   intent: z.string().trim().max(40).default('Buy'),
   inspectionRequested: z.boolean().default(false),
+  requestType: z.enum(['enquiry', 'viewing', 'payment', 'callback']).default('enquiry'),
+  viewingTime: z.string().trim().max(120).optional().default(''),
   requirements: z.string().trim().max(4000).optional().default(''),
 }).refine((value) => value.phone || value.email, { message: 'Enter a phone number or email address.' });
 
-const staticProperties = [
-  {
-    title: '3-bedroom apartment',
-    location: 'Wuse',
-    price: '₦85,000,000',
-    media: ['/images/wuse1.webp', '/images/wuse 2.webp', '/images/wuse 3.webp'].map((src) => ({ src, type: 'image' as const })),
-  },
-  {
-    title: '4-bedroom duplex',
-    location: 'Gwarinpa',
-    price: '₦120,000,000',
-    media: ['/images/gwarimpa.webp', '/images/gwarimpa2.webp', '/images/gwarimpa3.webp'].map((src) => ({ src, type: 'image' as const })),
-  },
-  {
-    title: '4-bedroom terrace',
-    location: 'Jabi',
-    price: '₦95,000,000',
-    media: ['/images/jabi.webp', '/images/jabi 2.webp', '/images/jabi 3.webp'].map((src) => ({ src, type: 'image' as const })),
-  },
-  {
-    title: '5-bedroom duplex',
-    location: 'Maitama',
-    price: '₦250,000,000',
-    media: [],
-  },
-];
-
 function sendStaticDemoReply(message: string, sendEvent: (event: DemoStreamEvent) => void, history: DemoContextTurn[] = []) {
-  const content = resolveDemoQuery(message, history).toLowerCase();
-  if (/^(hi|hello|hey|good morning|good afternoon|good evening)[!.?\s]*$/.test(content)) {
-    sendEvent({ type: 'text', text: 'Hello! I can help with the sample homes, prices and viewing times. What would you like to know?' });
-    return;
-  }
-  const wantsAgent = /\b(speak|talk|connect)\b/.test(content) && /\b(agent|person|human|team)\b/.test(content);
-  if (wantsAgent) {
-    sendEvent({ type: 'text', text: 'Of course. Please share your name and best contact details using the form below, and our team will follow up.' });
-    return;
-  }
-
-  const wantsPolicy = /\b(inspection|viewing|visit|open|opening hours|business hours|installment|installments|payment)\b/.test(content);
-  if (wantsPolicy) {
-    sendEvent({ type: 'text', text: 'Inspections are Monday to Saturday, 9:00 AM to 5:00 PM. Outright payment is accepted, and installment is available on selected properties.\n\nWould you like help arranging a viewing?' });
-    return;
-  }
-
-  const wantsProperties = /how much|\b(view|show|list|browse|see|available|price|prices|cost|recommend|looking|need|bedroom|home|house|property|apartment|wuse|gwarinpa|jabi|maitama)\b/.test(content);
-  if (wantsProperties) {
-    const locationMatch = staticProperties.find((property) => content.includes(property.location.toLowerCase()));
-    const properties = locationMatch ? [locationMatch] : staticProperties;
-    sendEvent({ type: 'properties', properties });
-    sendEvent({ type: 'text', text: locationMatch ? `Of course. Here is the sample home in ${locationMatch.location}:` : 'Of course. Here are the sample homes and prices currently available in this demo:' });
-    return;
-  }
-
+  const reply = getDemoSalesReply(message, history);
+  if (reply) return sendDemoSalesReply(reply, sendEvent);
   sendEvent({ type: 'text', text: DEMO_SERVICE_ERROR_MESSAGE });
+  sendEvent({ type: 'guidance', ...getDemoGuidance(message, history), requestType: 'enquiry' });
 }
 
 const visitors = new Map<string, { count: number; resetAt: number }>();
@@ -119,6 +72,7 @@ export async function POST(request: Request) {
     const encoder = new TextEncoder();
     let streamClosed = false;
     let replyStarted = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         const sendEvent = (event: DemoStreamEvent) => {
@@ -127,17 +81,27 @@ export async function POST(request: Request) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
           }
         };
-        void replyToDemoVisitor(identity.key, parsed.data.message, sendEvent)
+        // DNS discovery can outlast the database's connection timeout. Keep the
+        // demo responsive while the workflow can still finish saving in the background.
+        fallbackTimer = setTimeout(() => {
+          if (streamClosed || replyStarted) return;
+          sendStaticDemoReply(parsed.data.message, sendEvent, parsed.data.history);
+          streamClosed = true;
+          controller.close();
+        }, getDemoSalesReply(parsed.data.message, parsed.data.history) ? 3_000 : 20_000);
+        void replyToDemoVisitor(identity.key, parsed.data.message, sendEvent, parsed.data.history)
           .then(() => {
-            if (!streamClosed) controller.close();
+            if (!streamClosed) { streamClosed = true; controller.close(); }
           })
           .catch((error: unknown) => {
             console.error('[sales-engine] demo response failed', error);
             if (!replyStarted) sendStaticDemoReply(parsed.data.message, sendEvent, parsed.data.history);
             if (!streamClosed) controller.close();
-          });
+          })
+          .finally(() => clearTimeout(fallbackTimer));
       },
       cancel() {
+        clearTimeout(fallbackTimer);
         streamClosed = true;
       },
     });
@@ -168,7 +132,7 @@ export async function PUT(request: Request) {
     const parsed = leadSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ message: parsed.error.issues[0]?.message || 'Please provide your contact details.' }, { status: 400 });
     const identity = await visitor();
-    const lead = await captureDemoLead(identity.key, parsed.data);
+    const lead = await captureDemoLead(identity.key, { ...parsed.data, inspectionRequested: parsed.data.requestType === 'viewing', requirements: [parsed.data.requestType === 'viewing' ? 'Viewing requested (not confirmed)' : parsed.data.requestType === 'payment' ? 'Payment details requested' : parsed.data.requestType === 'callback' ? 'Callback requested' : 'Enquiry saved', parsed.data.requirements].filter(Boolean).join('\n').slice(0, 4000) });
     const response = NextResponse.json({ lead: lead.toJSON() }, { status: 201 });
     if (identity.isNew) response.cookies.set('tko.demo.visitor', identity.key, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 30, path: '/' });
     return response;

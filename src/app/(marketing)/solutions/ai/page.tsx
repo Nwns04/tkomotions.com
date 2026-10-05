@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { AIPackagePricing, type AiAddOn, type AiPriceItem } from '@/components/ai-solutions/AIPackagePricing';
+import { AIPackagePricing, type AiAddOn, type AiPriceItem, type AiCustomSystem, type AiMarketingOffer } from '@/components/ai-solutions/AIPackagePricing';
 import { AISalesDemo } from '@/components/sales-engine/AISalesDemo';
 
 export const metadata: Metadata = {
@@ -12,128 +12,189 @@ export const metadata: Metadata = {
 
 const solutions: AiPriceItem[] = [
   {
-    number: '01',
-    name: 'AI CUSTOMER ASSISTANT',
-    outcome: 'Help me answer customers.',
-    setupNgn: 80000,
-    monthlyNgn: 10000,
-    description: 'Answer routine customer questions and capture useful enquiries without replying manually each time.',
-    bestForSummary: 'Vendors & small businesses',
-    bestFor: 'Fashion, shoes, bags, hair, beauty, gadgets, food, cakes, tailoring, photography, makeup and solo service businesses.',
-    example: 'A fashion shopper asks about price, size 42, availability and delivery to Lagos. The assistant answers from the vendor’s information and captures a serious enquiry.',
-    includes: [
-      'Website AI customer assistant',
-      'Business knowledge setup',
-      'Products and services information',
-      'FAQ automation',
-      'Pricing and basic business information',
-      'Opening hours, location and delivery information',
-      'Basic enquiry capture',
-      'Human handoff',
-      'Basic conversation history',
-      'Basic maintenance and support',
-    ],
+    "number": "01",
+    "name": "AI CUSTOMER",
+    "outcome": "Get online. Answer customers.",
+    "setupNgn": 80000,
+    "monthlyNgn": 10000,
+    "description": "For small businesses that need a professional online presence and an easier way for customers to get answers.",
+    "bestFor": "Fashion vendors • Hair/wig sellers • Tailors • Shoe sellers • Beauty businesses • Artisans • Cake vendors • Photographers • Freelancers • Small service businesses",
+    "promise": "Get your business online and give customers a better way to discover and enquire.",
+    "featureGroups": [
+      {
+        "title": "Business Presence",
+        "features": [
+          "One-page professional business website",
+          "Business information",
+          "Products/services",
+          "Gallery",
+          "Contact/location",
+          "Social media links",
+          "WhatsApp/contact CTA",
+          "Mobile optimization",
+          "Basic SEO setup"
+        ]
+      },
+      {
+        "title": "AI Customer Assistant",
+        "features": [
+          "Business knowledge setup",
+          "FAQ automation",
+          "Products/services information",
+          "Pricing/basic information",
+          "Opening hours/location/delivery information",
+          "Basic enquiry capture",
+          "Human handoff"
+        ]
+      },
+      {
+        "title": "Support",
+        "features": [
+          "Hosting/platform maintenance",
+          "Basic analytics",
+          "Monthly support"
+        ]
+      }
+    ]
   },
   {
-    number: '02',
-    name: 'AI LEAD ASSISTANT',
-    outcome: 'Help me manage enquiries.',
-    setupNgn: 150000,
-    monthlyNgn: 20000,
-    description: 'Manage regular enquiries, collect customer requirements and organize conversations into actionable leads.',
-    bestForSummary: 'Growing businesses',
-    bestFor: 'Established fashion brands, electronics and furniture sellers, auto dealers, restaurants, hotels, event vendors, training businesses, real estate and growing online stores.',
-    example: 'A furniture buyer wants a six-seater dining table. The assistant collects product, budget, location, style, delivery needs and contact details before notifying the owner.',
-    includes: [
-      'Everything in AI Customer Assistant',
-      'Advanced business knowledge base',
-      'Product and service catalogue',
-      'Lead capture and qualification',
-      'Customer requirement collection',
-      'Lead notifications',
-      'Basic lead management and categorization',
-      'Appointment or order requests',
-      'Basic follow-up workflows',
-      'Conversation history',
-      'Basic business dashboard',
-      'Monthly optimization',
-    ],
+    "number": "02",
+    "name": "AI LEAD",
+    "outcome": "Capture and qualify enquiries.",
+    "setupNgn": 150000,
+    "monthlyNgn": 20000,
+    "description": "For businesses already receiving regular enquiries and ready to turn those enquiries into structured leads.",
+    "bestFor": "Established fashion brands • Gadget sellers • Furniture businesses • Restaurants • Hotels/Airbnb • Event vendors • Training businesses • Real estate agents • Growing online stores • Professional services",
+    "promise": "Stop losing enquiries in your DMs. Capture the information you need to follow up.",
+    "includedFrom": "Everything in AI Customer, plus:",
+    "featureGroups": [
+      {
+        "title": "Additional features",
+        "features": [
+          "Advanced business knowledge base",
+          "Product/service catalogue",
+          "Lead capture",
+          "Lead qualification",
+          "Customer requirement collection",
+          "Enquiry categorization",
+          "Lead notifications",
+          "Basic lead management",
+          "Appointment requests",
+          "Order enquiries",
+          "Basic follow-up workflows",
+          "Conversation history",
+          "Basic business dashboard",
+          "Monthly optimization"
+        ]
+      }
+    ]
   },
   {
-    number: '03',
-    name: 'AI SALES ENGINE',
-    outcome: 'Turn enquiries into sales.',
-    setupNgn: 350000,
-    monthlyNgn: 60000,
-    description: 'Combine advanced qualification, lead scoring and follow-up in one sales workflow.',
-    bestForSummary: 'Sales-driven businesses',
-    bestFor: 'Sales-driven businesses, including real estate, schools, hospitality, logistics, professional services and larger ecommerce teams.',
-    example: 'A property prospect shares a location and budget. The assistant qualifies the enquiry, scores intent and gives the sales team a clear follow-up path.',
-    includes: [
-      'Everything in AI Lead Assistant',
-      'Advanced lead qualification and scoring',
-      'Sales pipeline and CRM',
-      'Automated follow-up',
-      'Appointment and order workflows',
-      'Sales notifications and dashboard',
-      'Human takeover',
-      'Sales performance insights',
-      'Monthly optimization',
-    ],
+    "number": "03",
+    "name": "AI SALES ENGINE",
+    "outcome": "Convert enquiries into opportunities and sales.",
+    "setupNgn": 350000,
+    "monthlyNgn": 60000,
+    "description": "For businesses with significant enquiry volume that want a system for converting enquiries into customers.",
+    "bestFor": "Real estate • Schools • Hotels • Auto dealers • Logistics • Training companies • Established ecommerce • Professional services • Property managers • Businesses with sales teams",
+    "promise": "Turn customer interest into qualified opportunities and sales.",
+    "includedFrom": "Everything in AI Lead, plus:",
+    "featureGroups": [
+      {
+        "title": "Additional features",
+        "features": [
+          "Advanced AI customer assistant",
+          "Advanced lead qualification",
+          "Lead scoring",
+          "Sales pipeline",
+          "CRM",
+          "Automated follow-up",
+          "Appointment/booking workflows",
+          "Order workflows",
+          "Sales notifications",
+          "Conversation history",
+          "Human takeover",
+          "Lead dashboard",
+          "Multiple customer journeys",
+          "Email notifications",
+          "Advanced workflows",
+          "Sales performance insights",
+          "Monthly optimization"
+        ]
+      }
+    ]
   },
   {
-    number: '04',
-    name: 'AI BUSINESS OPERATIONS',
-    outcome: 'Automate how your business works.',
-    setupNgn: 750000,
-    setupSuffix: '+',
-    monthlyNgn: 120000,
-    monthlySuffix: '+',
-    description: 'Improve customer-facing work and automate parts of internal business operations with AI-assisted workflows.',
-    bestForSummary: 'Established businesses',
-    bestFor: 'Established SMEs, schools, hotels, logistics and real estate companies, professional services, multi-location businesses and teams handling many documents or enquiries.',
-    example: 'Staff can find approved internal knowledge while recurring reports, document handling and workflow approvals move through a shared operations system.',
-    includes: [
-      'Everything in AI Sales Engine',
-      'Internal AI assistant',
-      'Document knowledge base',
-      'Staff knowledge system',
-      'Automated reports',
-      'Workflow and task automation',
-      'CRM workflows',
-      'Document processing',
-      'Management dashboard',
-      'Approval workflows',
-      'Internal notifications',
-      'Business process automation',
-      'Custom integrations',
-    ],
-  },
+    "number": "04",
+    "name": "AI BUSINESS OPERATIONS",
+    "outcome": "Automate how the business works.",
+    "setupNgn": 750000,
+    "monthlyNgn": 120000,
+    "description": "For established businesses that want AI to improve customer-facing and internal operations.",
+    "bestFor": "Established SMEs • Schools • Hotels • Logistics companies • Real estate companies • Professional services • Multi-location businesses • Businesses with multiple departments • Businesses processing large volumes of information",
+    "promise": "Go beyond customer enquiries and automate the work behind the business.",
+    "includedFrom": "Everything in AI Sales Engine, plus:",
+    "featureGroups": [
+      {
+        "title": "Additional features",
+        "features": [
+          "Internal AI assistant",
+          "Staff knowledge system",
+          "Document knowledge base",
+          "Document processing",
+          "Workflow automation",
+          "Task automation",
+          "CRM workflows",
+          "Automated reports",
+          "Management dashboard",
+          "Approval workflows",
+          "Internal notifications",
+          "Business process automation",
+          "Custom integrations"
+        ]
+      }
+    ]
+  }
 ];
 
-const customSystem: AiPriceItem = {
-  number: '05',
-  name: 'CUSTOM AI SYSTEMS',
-  outcome: 'Build around your specific operation.',
-  setupNgn: 1500000,
-  setupSuffix: '+',
-  monthlyNgn: 200000,
-  monthlySuffix: '+',
-  description: 'A custom AI-powered business system designed around complex workflows, existing software and organizational requirements.',
-  bestForSummary: 'Complex operations and integrations',
-  bestFor: 'Larger organizations, fintechs, large ecommerce operations, logistics networks, multi-branch businesses and organizations with complex integrations.',
-  example: 'Multiple AI agents can work across approved business systems, with custom workflows, dashboards, reporting and human approval controls.',
-  includes: [
-    'Multiple AI agents',
-    'Custom workflows and business logic',
-    'Custom APIs and CRM/ERP integrations',
-    'WhatsApp integration, scoped to requirements',
-    'Internal systems and custom dashboards',
-    'Document automation and advanced reporting',
-    'Role-based access and human approval controls',
-    'Dedicated support',
-  ],
+const customSystem: AiCustomSystem = {
+  "name": "CUSTOM AI SYSTEMS",
+  "setupNgn": 1500000,
+  "description": "For organizations that need a system designed around advanced workflows, existing software and specific business requirements.",
+  "includes": [
+    "Multiple AI agents",
+    "Custom APIs",
+    "CRM/ERP integrations",
+    "Internal systems",
+    "Advanced dashboards",
+    "Document automation",
+    "Complex workflows",
+    "Role-based access",
+    "Custom business logic"
+  ]
 };
+
+const marketingOffers: AiMarketingOffer[] = [
+  {
+    "name": "Marketing Launch",
+    "priceNgn": 50000,
+    "description": "Set up a focused campaign to introduce your business and collect enquiries.",
+    "features": [
+      "Campaign strategy",
+      "Ad copy",
+      "Creative direction",
+      "Campaign setup",
+      "Landing/customer page",
+      "Basic tracking"
+    ]
+  },
+  {
+    "name": "Monthly Ad Management",
+    "priceNgn": 30000,
+    "monthly": true,
+    "description": "Ongoing management of your advertising campaigns."
+  }
+];
 
 const addOns: AiAddOn[] = [
   { name: 'WhatsApp integration', priceNgn: 75000 },
@@ -225,7 +286,7 @@ export default function AiSolutionsPage() {
             Choose a starting point for customer engagement, sales or business operations. We shape the system around your workflow.
           </p>
         </div>
-        <AIPackagePricing solutions={solutions} customSystem={customSystem} addOns={addOns} />
+        <AIPackagePricing solutions={solutions} customSystem={customSystem} addOns={addOns} marketingOffers={marketingOffers} />
         <p className="mt-6 max-w-2xl text-xs leading-relaxed text-kh-muted">
           Starting prices. Final scope and requirements are confirmed with you before work begins.
         </p>

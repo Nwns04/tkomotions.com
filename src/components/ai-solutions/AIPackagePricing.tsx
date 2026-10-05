@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 export type AiPriceItem = {
   number: string;
@@ -8,16 +9,26 @@ export type AiPriceItem = {
   outcome: string;
   description: string;
   setupNgn: number;
-  setupSuffix?: string;
   monthlyNgn: number;
-  monthlySuffix?: string;
   bestFor: string;
-  bestForSummary: string;
-  example: string;
+  promise: string;
+  includedFrom?: string;
+  featureGroups: Array<{ title: string; features: string[] }>;
+};
+
+export type AiCustomSystem = {
+  name: string;
+  setupNgn: number;
+  description: string;
   includes: string[];
 };
 
 export type AiAddOn = { name: string; priceNgn: number };
+export type AiMarketingOffer = AiAddOn & {
+  monthly?: boolean;
+  description: string;
+  features?: string[];
+};
 
 type MarketCurrency = { country: string; code: string };
 type RatesResponse = { rates: Record<string, number>; updatedAt: string };
@@ -90,7 +101,7 @@ function formatCurrency(amount: number, currency: string) {
   }).format(amount);
 }
 
-export function AIPackagePricing({ solutions, customSystem, addOns }: { solutions: AiPriceItem[]; customSystem: AiPriceItem; addOns: AiAddOn[] }) {
+export function AIPackagePricing({ solutions, customSystem, addOns, marketingOffers }: { solutions: AiPriceItem[]; customSystem: AiCustomSystem; addOns: AiAddOn[]; marketingOffers: AiMarketingOffer[] }) {
   const [marketCountry, setMarketCountry] = useState('Nigeria');
   const [amountInput, setAmountInput] = useState('80000');
   const [rates, setRates] = useState<Record<string, number> | null>(null);
@@ -194,43 +205,51 @@ export function AIPackagePricing({ solutions, customSystem, addOns }: { solution
 
       <div className="mt-8 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {solutions.map((solution) => (
-          <article key={solution.number} className={`flex min-w-0 flex-col border p-5 ${solution.number === '03' ? 'border-kh-green bg-kh-soft' : 'border-kh-rule bg-white'}`}>
+          <article key={solution.number} aria-labelledby={'package-' + solution.number + '-title'} className={'flex min-w-0 flex-col border p-5 ' + (solution.number === '03' ? 'border-kh-green bg-kh-soft' : 'border-kh-rule bg-white')}>
             <div className="flex min-h-5 items-center justify-between gap-2">
               <span className="font-mono text-[9px] tracking-[0.055em] text-kh-muted">{solution.number} / AI</span>
               {solution.number === '03' && <span className="font-mono text-[8px] tracking-[0.04em] text-kh-green">RECOMMENDED</span>}
             </div>
-            <h3 className="mt-4 min-h-12 text-lg font-medium leading-tight tracking-[-0.025em]">{solution.name}</h3>
-            <p className="mt-2 min-h-10 text-sm leading-relaxed text-kh-muted">{solution.outcome}</p>
+            <h3 id={'package-' + solution.number + '-title'} className="mt-4 min-h-12 text-lg font-medium leading-tight tracking-[-0.025em]">{solution.name}</h3>
+            <p className="mt-2 min-h-12 text-sm leading-relaxed text-kh-green">{solution.outcome}</p>
             <div className="mt-5 bg-kh-green px-4 py-4 text-white">
               <p className="font-mono text-[9px] tracking-[0.055em] text-white/70">SETUP · {displayCurrency}</p>
-              <p className="mt-1 break-words text-2xl font-medium leading-tight">{displayAmount(solution.setupNgn, solution.setupSuffix)}</p>
+              <p className="mt-1 break-words text-2xl font-medium leading-tight">{displayAmount(solution.setupNgn)}</p>
               <p className="mt-3 border-t border-white/25 pt-3 font-mono text-[9px] tracking-[0.055em] text-white/70">MONTHLY · {displayCurrency}</p>
-              <p className="mt-1 break-words text-lg font-medium leading-tight">{displayAmount(solution.monthlyNgn, solution.monthlySuffix)} / MO</p>
+              <p className="mt-1 break-words text-lg font-medium leading-tight">{displayAmount(solution.monthlyNgn)} / MO</p>
             </div>
-            <p className="mt-4 text-xs leading-relaxed text-kh-muted"><span className="font-medium text-kh-ink">Best for: </span>{solution.bestForSummary}</p>
-            <details className="group mt-auto border-t border-kh-rule pt-4">
-              <summary className="cursor-pointer list-none font-mono text-[9px] tracking-[0.055em] text-kh-green marker:hidden">
-                <span className="group-open:hidden">VIEW INCLUDED FEATURES +</span>
-                <span className="hidden group-open:inline">HIDE INCLUDED FEATURES −</span>
-              </summary>
-              <ul className="mt-4 grid gap-2">
-                {solution.includes.map((feature) => (
-                  <li key={feature} className="flex gap-2 text-xs leading-relaxed text-kh-muted">
-                    <span aria-hidden="true" className="shrink-0 text-kh-green">✓</span>{feature}
-                  </li>
+            <p className="mt-4 text-xs leading-relaxed text-kh-muted sm:min-h-24">{solution.description}</p>
+            <div className="mt-5 border-t border-kh-rule pt-4">
+              <p className="min-h-10 text-xs font-medium leading-relaxed text-kh-green">{solution.includedFrom || 'Website, AI assistant and ongoing support.'}</p>
+              <div className="mt-4 grid gap-5">
+                {solution.featureGroups.map((group) => (
+                  <section key={group.title} aria-label={group.title}>
+                    <h4 className="mb-3 font-mono text-[9px] tracking-[0.055em] text-kh-ink">{group.title.toUpperCase()}</h4>
+                    <ul className="grid gap-2">
+                      {group.features.map((feature) => (
+                        <li key={feature} className="flex gap-2 text-xs leading-relaxed text-kh-muted">
+                          <span aria-hidden="true" className="shrink-0 text-kh-green">✓</span>
+                          <span>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
                 ))}
-              </ul>
-            </details>
+              </div>
+            </div>
+            <div className="mt-auto pt-6">
+              <p className="border-t border-kh-rule pt-4 text-xs leading-relaxed text-kh-muted sm:min-h-40"><span className="font-medium text-kh-ink">Best for: </span>{solution.bestFor}</p>
+              <p className="mt-4 border-t border-kh-rule pt-4 text-sm font-medium leading-relaxed text-kh-green sm:min-h-28">{solution.promise}</p>
+            </div>
           </article>
         ))}
       </div>
 
       <section className="mt-8 border border-kh-rule bg-kh-soft p-5 md:flex md:items-start md:justify-between md:gap-8 md:p-7" aria-labelledby="custom-ai-title">
         <div className="max-w-2xl">
-          <p className="font-mono text-[9px] tracking-[0.055em] text-kh-green">BEYOND THE PACKAGES</p>
+          <p className="font-mono text-[9px] tracking-[0.055em] text-kh-green">NEED SOMETHING MORE ADVANCED?</p>
           <h3 id="custom-ai-title" className="mt-3 text-2xl font-medium leading-tight tracking-[-0.03em]">{customSystem.name}</h3>
           <p className="mt-2 text-sm leading-relaxed text-kh-muted">{customSystem.description}</p>
-          <p className="mt-4 text-xs leading-relaxed text-kh-muted"><span className="font-medium text-kh-ink">For: </span>{customSystem.bestFor}</p>
           <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-2">
             {customSystem.includes.map((feature) => (
               <li key={feature} className="text-xs leading-relaxed text-kh-muted"><span aria-hidden="true" className="mr-2 text-kh-green">✓</span>{feature}</li>
@@ -239,9 +258,8 @@ export function AIPackagePricing({ solutions, customSystem, addOns }: { solution
         </div>
         <div className="mt-6 shrink-0 border-t border-kh-rule pt-4 md:mt-0 md:min-w-48 md:border-l md:border-t-0 md:pl-6 md:pt-0">
           <p className="font-mono text-[9px] tracking-[0.055em] text-kh-muted">FROM · {displayCurrency}</p>
-          <p className="mt-1 break-words text-2xl font-medium leading-tight text-kh-green">{displayAmount(customSystem.setupNgn, customSystem.setupSuffix)}</p>
-          <p className="mt-3 font-mono text-[9px] tracking-[0.055em] text-kh-muted">MONTHLY · {displayCurrency}</p>
-          <p className="mt-1 break-words text-lg font-medium leading-tight text-kh-green">{displayAmount(customSystem.monthlyNgn, customSystem.monthlySuffix)} / MO</p>
+          <p className="mt-1 break-words text-2xl font-medium leading-tight text-kh-green">{displayAmount(customSystem.setupNgn)}</p>
+          <Link href="/contact" className="mt-5 inline-flex min-h-11 items-center gap-3 border-b border-kh-green font-mono text-[10px] tracking-[0.055em] text-kh-green">TALK TO US <span aria-hidden="true">→</span></Link>
         </div>
       </section>
       <p className="mt-4 text-xs leading-relaxed text-kh-muted">WhatsApp integration is available as an add-on. Meta usage charges are separate.</p>
@@ -275,6 +293,28 @@ export function AIPackagePricing({ solutions, customSystem, addOns }: { solution
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="mt-16 border-t border-kh-rule pt-8" aria-labelledby="ai-marketing-title">
+        <p className="kh-label">MARKETING / SEPARATE FROM AI PACKAGES</p>
+        <h3 id="ai-marketing-title" className="mt-3 text-3xl font-medium leading-tight tracking-[-0.04em]">Marketing add-ons</h3>
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {marketingOffers.map((offer) => (
+            <article key={offer.name} className="border border-kh-rule p-5 md:p-6">
+              <h4 className="text-xl font-medium tracking-[-0.025em]">{offer.name}</h4>
+              <p className="mt-3 text-lg font-medium text-kh-green">From {displayAmount(offer.priceNgn)}{offer.monthly ? ' / month' : ''}</p>
+              <p className="mt-3 text-sm leading-relaxed text-kh-muted">{offer.description}</p>
+              {offer.features && (
+                <ul className="mt-5 grid gap-2 sm:grid-cols-2">
+                  {offer.features.map((feature) => (
+                    <li key={feature} className="flex gap-2 text-xs leading-relaxed text-kh-muted"><span aria-hidden="true" className="text-kh-green">✓</span>{feature}</li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          ))}
+        </div>
+        <p className="mt-4 text-sm leading-relaxed text-kh-muted">Advertising spend is paid separately by the client.</p>
       </section>
     </>
   );

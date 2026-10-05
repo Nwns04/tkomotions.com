@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const projectSchema = z.object({
   name: z.string().trim().min(2, 'Enter your name.'),
@@ -20,7 +20,12 @@ type ProjectValues = z.infer<typeof projectSchema>;
 
 export function ProjectForm({ className = '' }: { className?: string }) {
   const [status, setStatus] = useState('');
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ProjectValues>({ resolver: zodResolver(projectSchema) });
+  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<ProjectValues>({ resolver: zodResolver(projectSchema) });
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('need') !== 'ai-sales-demo') return;
+    setValue('need', 'AI or automation');
+    setValue('problem', 'I tried the TKO sales demo and would like a similar customer enquiry system for my business.');
+  }, [setValue]);
   async function submit(values: ProjectValues) {
     setStatus('');
     try {

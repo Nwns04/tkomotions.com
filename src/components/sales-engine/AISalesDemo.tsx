@@ -2,87 +2,40 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
+import { demoRequestLabels, extractDemoRequirements, getDemoGuidance, type DemoPropertyCard as PropertyCard, type DemoStreamEvent, type DemoRequirements, type DemoRequestType } from '@/sales-engine/demo-sales-flow';
+import { DEMO_SERVICE_ERROR_MESSAGE } from '@/sales-engine/demo-context';
 
-type PropertyMedia = {
-  src: string;
-  type: 'image' | 'video';
-  thumbnail?: string;
-};
-
-type PropertyCard = {
-  title: string;
-  location: string;
-  price: string;
-  media: PropertyMedia[];
-};
-
-type DemoStreamEvent =
-  | { type: 'text'; text: string }
-  | { type: 'properties'; properties: PropertyCard[] };
-
+type PropertyMedia = PropertyCard['media'][number];
 type DemoMessage = {
   role: 'user' | 'assistant';
   content: string;
-  showLeadLink?: boolean;
   followUps?: string[];
   properties?: PropertyCard[];
+  requestType?: DemoRequestType;
+  enquiry?: DemoRequirements;
 };
+type DemoContact = DemoRequirements & { name: string; phone: string; email: string; requestType: DemoRequestType };
 
-const suggestions = [
-  'I’d love to see available homes',
-  'Could you share the prices?',
-  'Please help me arrange an inspection',
-  'I’d like to speak with an agent',
-];
+const suggestions = ['Show me available homes', 'I need a three-bedroom home', 'When can I see the Wuse house?', 'What are the payment options?'];
+const initialMessages: DemoMessage[] = [{
+  role: 'assistant',
+  content: 'Welcome to TKO Properties, a fictional property demo. I can help you find a sample home, compare prices and prepare an enquiry. Which location or budget do you have in mind?',
+}];
+const emptyRequirements: DemoRequirements = { propertyType: '', location: '', budget: '', timeline: '', viewingTime: '', requirements: '', intent: 'Exploring' };
 
-const initialMessages: DemoMessage[] = [
-  {
-    role: 'assistant',
-    content:
-      'Hello, welcome to TKO Properties. I can help you explore available homes, compare prices or arrange an inspection. What can I help you find today?',
-  },
-];
-
-const LEAD_TRIGGERS = [
-  'view',
-  'inspection',
-  'inspect',
-  'arrange',
-  'agent',
-  'speak',
-  'call',
-  'visit',
-  'book',
-  'schedule',
-  'meet',
-];
-
-function shouldOfferLeadForm(text: string) {
-  const lower = text.toLowerCase();
-  return LEAD_TRIGGERS.some((keyword) => lower.includes(keyword));
-}
-
-function getFollowUpPrompts(reply: string) {
-  if (/share your (name|details)|secure contact form|team can provide more information/i.test(reply)) return [];
-
-  const location = reply.match(/Location:\s*([^\n.]+)/i)?.[1]?.trim();
-  if (location) {
-    return [`Tell me more about the ${location} home`, 'What are the viewing times?'];
-  }
-
-  if (/installment|payment options|payment details/i.test(reply)) {
-    return ['Show me homes in Wuse', 'Arrange a viewing'];
-  }
-
-  if (/inspection|viewing/i.test(reply)) {
-    return ['What viewing times are available?', 'Show me homes in Wuse'];
-  }
-
-  if (/don't have that information|not available|try again/i.test(reply)) {
-    return ['Show me homes in Wuse', 'What are the prices in Jabi?'];
-  }
-
-  return ['Show me homes in Wuse', 'What are the prices in Jabi?'];
+function EnquirySummary({ details, requestType }: { details: DemoRequirements; requestType: DemoRequestType }) {
+  const rows = [
+    ['Property', details.propertyType || 'To be discussed'],
+    ['Location', details.location || 'To be discussed'],
+    ['Budget', details.budget || 'Not provided'],
+    ['Moving timeframe', details.timeline || 'Not provided'],
+    ['Request', demoRequestLabels[requestType]],
+    ...(requestType === 'viewing' ? [['Preferred viewing', details.viewingTime || 'To be confirmed']] : []),
+  ];
+  return <dl className="grid gap-2 text-xs leading-relaxed">
+    {rows.map(([label, value]) => <div key={label} className="grid grid-cols-[7rem_1fr] gap-3"><dt className="text-kh-muted">{label}</dt><dd className="min-w-0 break-words text-kh-ink">{value}</dd></div>)}
+  </dl>;
 }
 
 export function AISalesDemo() {
@@ -93,157 +46,91 @@ export function AISalesDemo() {
   const [contactBusy, setContactBusy] = useState(false);
   const [contactMessage, setContactMessage] = useState('');
   const [selectedGallery, setSelectedGallery] = useState<{ title: string; items: PropertyMedia[]; index: number } | null>(null);
-  const [contact, setContact] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    propertyType: '',
-    location: '',
-    budget: '',
-    timeline: '',
-    inspectionRequested: true,
-  });
+  const [contact, setContact] = useState<DemoContact>({ ...emptyRequirements, name: '', phone: '', email: '', requestType: 'enquiry' });
+  const [completedEnquiry, setCompletedEnquiry] = useState<DemoContact | null>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const hasUserMessaged = messages.some((m) => m.role === 'user');
+  const hasUserMessaged = messages.some(message => message.role === 'user');
 
   useEffect(() => {
-    const messageList = messageListRef.current;
-    if (messageList) messageList.scrollTop = messageList.scrollHeight;
+    const list = messageListRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
   }, [messages, isBusy]);
 
   useEffect(() => {
     if (!selectedGallery) return undefined;
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') setSelectedGallery(null);
-      if (event.key === 'ArrowRight') {
-        setSelectedGallery((gallery) => gallery && ({ ...gallery, index: (gallery.index + 1) % gallery.items.length }));
-      }
-      if (event.key === 'ArrowLeft') {
-        setSelectedGallery((gallery) => gallery && ({ ...gallery, index: (gallery.index - 1 + gallery.items.length) % gallery.items.length }));
-      }
+      if (event.key === 'ArrowRight') setSelectedGallery(gallery => gallery && ({ ...gallery, index: (gallery.index + 1) % gallery.items.length }));
+      if (event.key === 'ArrowLeft') setSelectedGallery(gallery => gallery && ({ ...gallery, index: (gallery.index - 1 + gallery.items.length) % gallery.items.length }));
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedGallery]);
 
+  function openEnquiry(requestType: DemoRequestType, details?: DemoRequirements) {
+    setContact(current => ({ ...current, ...(details || extractDemoRequirements(messages)), requestType }));
+    setContactMessage('');
+    setShowContactForm(true);
+  }
+
   async function handleSend(nextMessage: string) {
     const trimmed = nextMessage.trim();
-    if (!trimmed || isBusy) return;
-
-    const userMessage: DemoMessage = { role: 'user', content: trimmed };
-    const history = messages.slice(-12);
-
-    setMessages((current) => [...current, userMessage]);
+    if (!trimmed || isBusy || showContactForm) return;
+    const history = messages.slice(-12).map(({ role, content }) => ({ role, content: content.slice(0, 2000) })).filter(turn => turn.content.trim());
+    const assistantIndex = messages.length + 1;
+    setMessages(current => [...current, { role: 'user', content: trimmed }]);
     setInput('');
     setIsBusy(true);
-
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 60_000);
-
-    try {
-      const response = await fetch('/api/ai-sales-demo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({ message: trimmed, history }),
-      });
-
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { message?: string };
-        throw new Error(data.message || 'Your message could not be sent. Please try again.');
+    let reply = '';
+    let properties: PropertyCard[] = [];
+    let guidance = getDemoGuidance(trimmed, history);
+    let requestType: DemoRequestType | undefined;
+    const updateAssistant = () => {
+      const next: DemoMessage = { role: 'assistant', content: reply, properties, followUps: guidance.followUps, requestType, enquiry: guidance.requirements };
+      setMessages(current => current[assistantIndex]
+        ? current.map((message, index) => index === assistantIndex ? next : message)
+        : [...current, next]);
+    };
+    const consume = (eventText: string) => {
+      const data = eventText.split(/\r?\n/).find(line => line.startsWith('data:'))?.slice(5).trim();
+      if (!data) return;
+      let event: DemoStreamEvent;
+      try { event = JSON.parse(data) as DemoStreamEvent; } catch { return; }
+      if (event.type === 'text') reply += event.text;
+      if (event.type === 'properties') properties = event.properties;
+      if (event.type === 'guidance') {
+        guidance = event;
+        requestType = event.requestType;
       }
-      if (!response.body) throw new Error('The reply stream was unavailable. Please try again.');
-
+      updateAssistant();
+    };
+    try {
+      const response = await fetch('/api/ai-sales-demo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ message: trimmed, history }) });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { message?: string };
+        throw new Error(data.message || 'Your message could not be sent.');
+      }
+      if (!response.body) throw new Error('The reply stream was unavailable.');
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      const assistantIndex = messages.length + 1;
-      let reply = '';
       let pending = '';
-      let properties: PropertyCard[] = [];
-      const updateAssistant = () => {
-        const assistantMessage: DemoMessage = {
-          role: 'assistant',
-          content: reply,
-          showLeadLink: shouldOfferLeadForm(trimmed) || /having trouble answering/i.test(reply),
-          ...(properties.length ? { properties } : {}),
-        };
-        setMessages((current) => {
-          if (current[assistantIndex]) {
-            return current.map((message, index) => index === assistantIndex ? assistantMessage : message);
-          }
-          return [...current, assistantMessage];
-        });
-      };
-      let finished = false;
-
-      while (!finished) {
+      while (true) {
         const result = await reader.read();
-        finished = result.done;
-        pending += decoder.decode(result.value, { stream: !finished });
+        pending += decoder.decode(result.value, { stream: !result.done });
         const events = pending.split(/\r?\n\r?\n/);
         pending = events.pop() || '';
-
-        for (const eventText of events) {
-          const data = eventText.split(/\r?\n/).find((line) => line.startsWith('data:'))?.slice(5).trim();
-          if (!data) continue;
-          try {
-            const event = JSON.parse(data) as DemoStreamEvent;
-            if (event.type === 'text') reply += event.text;
-            if (event.type === 'properties') properties = event.properties;
-            if (reply || properties.length) updateAssistant();
-          } catch {
-            continue;
-          }
-        }
-
-        if (finished && pending.trim()) {
-          const data = pending.split(/\r?\n/).find((line) => line.startsWith('data:'))?.slice(5).trim();
-          if (data) {
-            try {
-              const event = JSON.parse(data) as DemoStreamEvent;
-              if (event.type === 'text') reply += event.text;
-              if (event.type === 'properties') properties = event.properties;
-              if (reply || properties.length) updateAssistant();
-            } catch {
-              pending = '';
-            }
-          }
-        }
+        events.forEach(consume);
+        if (result.done) { if (pending.trim()) consume(pending); break; }
       }
-
-      if (!reply.trim()) {
-        const fallback = "I don't have that information available right now. I can connect you with a member of the team.";
-        setMessages((current) => [...current, {
-          role: 'assistant',
-          content: fallback,
-          showLeadLink: shouldOfferLeadForm(trimmed),
-          followUps: getFollowUpPrompts(fallback),
-        }]);
-      } else {
-        const followUps = getFollowUpPrompts(reply);
-        if (followUps.length) {
-          setMessages((current) => current.map((message, index) => index === assistantIndex
-            ? { ...message, followUps }
-            : message));
-        }
-      }
+      if (!reply.trim()) throw new Error('The assistant returned no reply.');
     } catch (error) {
-      setMessages((current) => [
-        ...current,
-        {
-          role: 'assistant',
-          content:
-            error instanceof Error && error.name === 'AbortError'
-              ? 'This is taking longer than expected. Please try again, or leave your contact details and our team will follow up.'
-              : "We're having trouble processing your request right now. Please leave your contact details and our team will get back to you.",
-          showLeadLink: true,
-          followUps: getFollowUpPrompts(error instanceof Error && error.name === 'AbortError'
-            ? 'This is taking longer than expected. Please try again.'
-            : "We're having trouble processing your request right now."),
-        },
-      ]);
+      const reason = error instanceof Error && error.name === 'AbortError' ? 'The reply is taking longer than expected.' : DEMO_SERVICE_ERROR_MESSAGE;
+      reply = (reply ? reply.trimEnd() + '\n\n' : '') + reason;
+      requestType = 'enquiry';
+      updateAssistant();
     } finally {
       window.clearTimeout(timeoutId);
       setIsBusy(false);
@@ -254,42 +141,19 @@ export function AISalesDemo() {
   async function submitContact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (contactBusy) return;
-
+    if (!contact.phone.trim() && !contact.email.trim()) { setContactMessage('Add a phone number or email address.'); return; }
     setContactBusy(true);
     setContactMessage('');
-
     try {
-      const response = await fetch('/api/ai-sales-demo', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contact),
-      });
-
-      const data = (await response.json()) as {
-        message?: string;
-        lead?: { classification?: string };
-      };
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Could not save your details.');
-      }
-
-      setMessages((current) => [
-        ...current,
-        {
-          role: 'assistant',
-          content: `Thank you, ${contact.name}. The TKO Properties team has received your details and will be in touch soon.`,
-        },
-      ]);
+      const response = await fetch('/api/ai-sales-demo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...contact, inspectionRequested: contact.requestType === 'viewing' }) });
+      const data = await response.json() as { message?: string };
+      if (!response.ok) throw new Error(data.message || 'Could not save your demo enquiry.');
+      setCompletedEnquiry({ ...contact });
+      setMessages(current => [...current, { role: 'assistant', content: 'Your demo enquiry has been saved. No real property appointment has been booked. You can see the sample lead summary below the chat.' }]);
       setShowContactForm(false);
-      setContactMessage('');
     } catch (error) {
-      setContactMessage(
-        error instanceof Error ? error.message : 'Could not save your details.',
-      );
-    } finally {
-      setContactBusy(false);
-    }
+      setContactMessage(error instanceof Error ? error.message : 'Could not save your demo enquiry.');
+    } finally { setContactBusy(false); }
   }
 
   return (
@@ -299,7 +163,7 @@ export function AISalesDemo() {
       <div className="flex shrink-0 items-center gap-2.5 border-b border-kh-rule px-5 py-3.5">
         <span className="h-2 w-2 rounded-full bg-kh-lime" />
         <p className="text-sm font-medium text-kh-ink">TKO Properties</p>
-        <span className="text-[11px] text-kh-muted">· Live</span>
+        <span className="text-[11px] text-kh-muted">· Fictional demo</span>
       </div>
 
       {/* Message area */}
@@ -379,7 +243,7 @@ export function AISalesDemo() {
                         <button
                           key={followUp}
                           type="button"
-                          disabled={isBusy}
+                          disabled={isBusy || showContactForm}
                           onClick={() => handleSend(followUp)}
                           className="rounded-full border border-kh-rule bg-white px-2.5 py-1 text-[11px] leading-4 text-kh-green transition-colors hover:border-kh-green hover:bg-kh-soft disabled:cursor-wait disabled:opacity-50"
                         >
@@ -388,13 +252,13 @@ export function AISalesDemo() {
                       ))}
                     </div>
                   )}
-                  {message.showLeadLink && !showContactForm && (
+                  {message.requestType && !showContactForm && (
                     <button
                       type="button"
-                      onClick={() => setShowContactForm(true)}
+                      onClick={() => openEnquiry(message.requestType || 'enquiry', extractDemoRequirements(messages))}
                       className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-kh-green"
                     >
-                      Share my details
+                      {demoRequestLabels[message.requestType]}
                       <span className="transition-transform duration-200 group-hover:translate-x-0.5">
                         →
                       </span>
@@ -424,83 +288,42 @@ export function AISalesDemo() {
           >
             <button
               type="button"
+              disabled={contactBusy}
               onClick={() => setShowContactForm(false)}
               className="mb-4 inline-flex items-center gap-1.5 self-start text-[13px] text-kh-muted hover:text-kh-ink"
             >
               <span>←</span> Back to chat
             </button>
-            <p className="text-sm font-medium text-kh-ink">Share your details</p>
-            <p className="mt-1 text-sm text-kh-muted">
-              Our team will follow up to confirm your viewing.
-            </p>
-
-            <form onSubmit={submitContact} className="mt-5 grid gap-3">
-              <input
-                required
-                value={contact.name}
-                onChange={(event) =>
-                  setContact({ ...contact, name: event.target.value })
-                }
-                placeholder="Your name"
-                className="rounded-xl border border-kh-rule bg-white px-3 py-2.5 text-sm focus:border-kh-green focus:outline-none"
-              />
+            <p className="text-sm font-medium text-kh-ink">Review your demo enquiry</p>
+            <p className="mt-1 text-xs leading-relaxed text-kh-muted">This demonstrates how an enquiry is captured. Use sample contact details if you prefer. No real property appointment will be booked.</p>
+            <form onSubmit={submitContact} className="mt-4 grid gap-3">
+              <label className="grid gap-1 text-xs text-kh-muted">What would you like to do?
+                <select value={contact.requestType} onChange={event => setContact({ ...contact, requestType: event.target.value as DemoRequestType })} className="border border-kh-rule bg-white px-3 py-2.5 text-sm text-kh-ink">
+                  {Object.entries(demoRequestLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <div className="border border-kh-rule bg-kh-soft p-3"><EnquirySummary details={contact} requestType={contact.requestType} /></div>
+              <details className="border-b border-kh-rule pb-3">
+                <summary className="cursor-pointer text-xs font-medium text-kh-green">Edit enquiry details</summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {([
+                    ['propertyType', 'Property'], ['location', 'Location'], ['budget', 'Budget'], ['timeline', 'Moving timeframe'],
+                    ...(contact.requestType === 'viewing' ? [['viewingTime', 'Preferred viewing day and time']] : []),
+                  ] as Array<[keyof DemoRequirements, string]>).map(([key, label]) => <label key={key} className="grid gap-1 text-xs text-kh-muted">{label}<input value={contact[key]} maxLength={key === 'budget' ? 80 : 120} onChange={event => setContact({ ...contact, [key]: event.target.value })} className="border border-kh-rule px-3 py-2 text-sm text-kh-ink" /></label>)}
+                  <label className="grid gap-1 text-xs text-kh-muted sm:col-span-2">Questions and requirements<textarea value={contact.requirements} maxLength={3000} rows={3} onChange={event => setContact({ ...contact, requirements: event.target.value })} className="border border-kh-rule px-3 py-2 text-sm text-kh-ink" /></label>
+                </div>
+              </details>
+              <label className="grid gap-1 text-xs text-kh-muted">Name<input required minLength={2} maxLength={120} value={contact.name} onChange={event => setContact({ ...contact, name: event.target.value })} placeholder="Your name or a sample name" className="border border-kh-rule px-3 py-2.5 text-sm text-kh-ink" /></label>
+              <p className="text-xs text-kh-muted">Add a phone number or email address.</p>
               <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                  value={contact.phone}
-                  onChange={(event) =>
-                    setContact({ ...contact, phone: event.target.value })
-                  }
-                  placeholder="Phone number"
-                  className="rounded-xl border border-kh-rule bg-white px-3 py-2.5 text-sm focus:border-kh-green focus:outline-none"
-                />
-                <input
-                  type="email"
-                  value={contact.email}
-                  onChange={(event) =>
-                    setContact({ ...contact, email: event.target.value })
-                  }
-                  placeholder="Email"
-                  className="rounded-xl border border-kh-rule bg-white px-3 py-2.5 text-sm focus:border-kh-green focus:outline-none"
-                />
+                <label className="grid gap-1 text-xs text-kh-muted">Phone<input type="tel" maxLength={60} value={contact.phone} onChange={event => setContact({ ...contact, phone: event.target.value })} className="border border-kh-rule px-3 py-2.5 text-sm text-kh-ink" /></label>
+                <label className="grid gap-1 text-xs text-kh-muted">Email<input type="email" maxLength={254} value={contact.email} onChange={event => setContact({ ...contact, email: event.target.value })} className="border border-kh-rule px-3 py-2.5 text-sm text-kh-ink" /></label>
               </div>
-              <input
-                value={contact.location}
-                onChange={(event) =>
-                  setContact({ ...contact, location: event.target.value })
-                }
-                placeholder="Preferred location"
-                className="rounded-xl border border-kh-rule bg-white px-3 py-2.5 text-sm focus:border-kh-green focus:outline-none"
-              />
-              <input
-                value={contact.timeline}
-                onChange={(event) =>
-                  setContact({ ...contact, timeline: event.target.value })
-                }
-                placeholder="Preferred inspection time"
-                className="rounded-xl border border-kh-rule bg-white px-3 py-2.5 text-sm focus:border-kh-green focus:outline-none"
-              />
-
               <div className="mt-1 flex gap-3">
-                <button
-                  disabled={contactBusy}
-                  className="bg-kh-green px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-                >
-                  {contactBusy ? 'Sending…' : 'Send request'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowContactForm(false)}
-                  className="text-sm text-kh-muted"
-                >
-                  Cancel
-                </button>
+                <button disabled={contactBusy} className="bg-kh-green px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60">{contactBusy ? 'Saving…' : 'Save demo enquiry'}</button>
+                <button type="button" disabled={contactBusy} onClick={() => setShowContactForm(false)} className="text-sm text-kh-muted">Cancel</button>
               </div>
-
-              {contactMessage && (
-                <p role="status" className="text-sm text-red-600">
-                  {contactMessage}
-                </p>
-              )}
+              {contactMessage && <p role="status" className="text-sm text-red-600">{contactMessage}</p>}
             </form>
           </div>
         )}
@@ -534,6 +357,7 @@ export function AISalesDemo() {
           className="flex items-center gap-2"
         >
           <input
+            disabled={showContactForm}
             ref={inputRef}
             type="text"
             value={input}
@@ -544,7 +368,7 @@ export function AISalesDemo() {
           />
           <button
             type="submit"
-            disabled={!input.trim() || isBusy}
+            disabled={!input.trim() || isBusy || showContactForm}
             aria-label="Send message"
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-kh-green text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -553,6 +377,19 @@ export function AISalesDemo() {
         </form>
       </div>
     </div>
+    {completedEnquiry && (
+      <section className="mt-5 border border-kh-rule bg-kh-soft p-5" aria-labelledby="demo-lead-title">
+        <p className="font-mono text-[9px] tracking-[0.055em] text-kh-green">DEMO ENQUIRY CAPTURED</p>
+        <h3 id="demo-lead-title" className="mt-2 text-lg font-medium text-kh-ink">Sample lead summary</h3>
+        <div className="mt-4"><EnquirySummary details={completedEnquiry} requestType={completedEnquiry.requestType} /></div>
+        <p className="mt-3 text-xs leading-relaxed text-kh-muted">Contact method recorded: {completedEnquiry.phone && completedEnquiry.email ? 'phone and email' : completedEnquiry.phone ? 'phone' : 'email'}. This is a demo enquiry, not a confirmed booking.</p>
+        <div className="mt-5 border-t border-kh-rule pt-4">
+          <p className="text-sm leading-relaxed text-kh-ink">This is how your business could capture an enquiry with the customer’s requirements already organized. Want this for your business?</p>
+          <Link href="/contact?need=ai-sales-demo" className="mt-3 inline-flex min-h-11 items-center gap-3 text-sm font-medium text-kh-green">Discuss my business <span aria-hidden="true">→</span></Link>
+          <p className="mt-1 text-xs text-kh-muted">A separate project enquiry to TKO Motions.</p>
+        </div>
+      </section>
+    )}
     {selectedGallery && (
       <div
         className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 md:p-8"

@@ -2,181 +2,81 @@ import { createAIProvider } from '../ai';
 import type { AIInput } from '../ai';
 import { connectToDatabase } from '../db/connection';
 import { AgentAction, Appointment, Conversation, Lead, Message } from '../db/models';
-import { DEMO_FALLBACK_MESSAGE } from '../demo-engine';
-import { DEMO_SERVICE_ERROR_MESSAGE, resolveDemoQuery } from '../demo-context';
-import { ensureDemoBusiness, findDemoKnowledge, getDemoKnowledge, listDemoProperties, searchDemoKnowledge } from './demo-business';
+import { DEMO_SERVICE_ERROR_MESSAGE, type DemoContextTurn } from '../demo-context';
+import { getDemoGuidance, getDemoSalesReply, sendDemoSalesReply, type DemoStreamEvent } from '../demo-sales-flow';
+import { ensureDemoBusiness, getDemoKnowledge } from './demo-business';
 import { scoreSalesLead, type LeadScoreInput } from './lead-scoring';
 import { notifyQualifiedLead } from './lead-notification';
 
-const humanMessage = 'A member of the team has taken over this conversation and will respond shortly.';
+export type { DemoStreamEvent, DemoPropertyCard } from '../demo-sales-flow';
 
-export type DemoPropertyCard = {
-  title: string;
-  location: string;
-  price: string;
-  media: Array<{ src: string; type: 'image' | 'video'; thumbnail?: string }>;
-};
-
-export type DemoStreamEvent =
-  | { type: 'text'; text: string }
-  | { type: 'properties'; properties: DemoPropertyCard[] };
-
-const propertyImages: Record<string, string[]> = {
-  wuse: ['/images/wuse1.webp', '/images/wuse 2.webp', '/images/wuse 3.webp'],
-  jabi: ['/images/jabi.webp', '/images/jabi 2.webp', '/images/jabi 3.webp'],
-  gwarinpa: ['/images/gwarimpa.webp', '/images/gwarimpa2.webp', '/images/gwarimpa3.webp'],
-};
-
-function isPropertyBrowseRequest(content: string) {
-  return /\b(view|show|list|browse|see|available)\b/i.test(content)
-    && /\b(properties|property|homes?|houses?|apartments?)\b/i.test(content);
+export function systemPrompt(context: string) {
+  return 'You are the TKO Properties sales assistant in a fictional real-estate demo. Help the visitor find a suitable home and take a useful next step. Answer the actual question first. Use only the approved information below. Never invent addresses, amenities, fees, payment eligibility, availability, legal documents or confirmed appointment times. Viewing requests are Monday to Saturday, 9 AM to 5 PM and require confirmation. If a fact is missing, say what needs verification, offer to add that question to the enquiry, and keep helping. Ask at most one relevant question at a time about location, budget or moving timeframe, and do not repeat information already given. Respect visitors who are just exploring; offer to save an enquiry instead of forcing a viewing. Use short plain-text paragraphs. Do not promise that a fictional property team will call the visitor or that a booking has been made. Do not collect contact details in chat: invite them to use the enquiry form.\n\nApproved information:\n' + context;
 }
 
-function isPropertyRecommendationRequest(content: string) {
-  return /\b(recommend|looking for|searching for|need|family|bedroom)\b/i.test(content)
-    && /\b(home|house|property|apartment|bedroom|family|wuse|gwarinpa|jabi|maitama)\b/i.test(content);
-}
-
-function isPropertyPricingRequest(content: string) {
-  return /\b(pricing|prices?|costs?)\b|how much/i.test(content);
-}
-
-function isAgentRequest(content: string) {
-  return /\b(speak|talk|connect)\b/i.test(content) && /\b(agent|person|human|team)\b/i.test(content);
-}
-
-function isInspectionPolicyRequest(content: string) {
-  return /\b(inspection|viewing|visit|open|opening hours|business hours|installment|installments|payment terms)\b/i.test(content);
-}
-
-function systemPrompt(context: string) {
-  return `You are the TKO Properties customer-service and sales assistant for a real-estate demonstration. Be warm, courteous, clear and helpful without being pushy. Use only the approved knowledge below. Never invent prices, availability, policies, discounts or appointment times. If the answer is unavailable, reply exactly: "${DEMO_FALLBACK_MESSAGE}". Use short sentences and plain text. Put each property on its own bullet, with the property type, location and price easy to scan. Leave a blank line between sections. End with one gentle, useful next-step question when appropriate. If someone shows interest, invite them to use the secure contact form.\n\nApproved knowledge:\n${context || 'No matching approved information was found.'}`;
-}
-
-export async function replyToDemoVisitor(visitorKey: string, content: string, onEvent?: (event: DemoStreamEvent) => void) {
+export async function replyToDemoVisitor(visitorKey: string, content: string, onEvent?: (event: DemoStreamEvent) => void, history: DemoContextTurn[] = []) {
   await connectToDatabase();
   const business = await ensureDemoBusiness();
   let conversation = await Conversation.findOne({ businessId: business._id, visitorKey, channel: 'WEB' }).sort({ updatedAt: -1 });
   if (!conversation) conversation = await Conversation.create({ businessId: business._id, visitorKey, channel: 'WEB', status: 'ACTIVE' });
-
+  const stored = await Message.find({ conversationId: conversation._id }).sort({ createdAt: -1, _id: -1 }).limit(12).lean();
+  const prior: DemoContextTurn[] = history.length ? history : stored.reverse().map(message => ({
+    role: message.role === 'customer' ? 'user' : 'assistant', content: message.content,
+  }));
   await Promise.all([
     Message.create({ businessId: business._id, conversationId: conversation._id, role: 'customer', content }),
     Conversation.updateOne({ _id: conversation._id }, { $set: { lastMessageAt: new Date() } }),
   ]);
-
   const conversationId = String(conversation._id);
-  async function sendImmediateReply(reply: string, actionType = 'search_knowledge', properties?: DemoPropertyCard[]) {
-    if (properties?.length) onEvent?.({ type: 'properties', properties });
-    onEvent?.({ type: 'text', text: reply });
-    await Promise.all([
-      Message.create({ businessId: business._id, conversationId: conversation._id, role: 'assistant', content: reply }),
-      AgentAction.create({ businessId: business._id, conversationId: conversation._id, actionType, status: 'SUCCESS', payload: { query: content.slice(0, 500) }, result: 'Answered from approved demo workflow' }),
-    ]);
+  async function saveReply(reply: string) {
+    await Message.create({ businessId: business._id, conversationId: conversation._id, role: 'assistant', content: reply });
     return { reply, conversationId };
   }
-
-  if (conversation.status === 'HUMAN') return sendImmediateReply(humanMessage, 'human_handoff');
-
-  if (isAgentRequest(content)) {
-    const reply = 'Of course. Please share your name and best contact details using the viewing request form below, and our team will be happy to help.';
-    return sendImmediateReply(reply, 'human_handoff');
+  if (conversation.status === 'HUMAN') {
+    const reply = 'This conversation is with the team. You can review or save your enquiry while waiting for a response.';
+    onEvent?.({ type: 'text', text: reply });
+    onEvent?.({ type: 'guidance', ...getDemoGuidance(content, prior), requestType: 'callback' });
+    return saveReply(reply);
   }
 
-  const recent = await Message.find({ conversationId: conversation._id }).sort({ createdAt: -1, _id: -1 }).limit(13).lean();
-  const query = resolveDemoQuery(content, recent.slice(1).reverse());
-  const propertyBrowseRequest = isPropertyBrowseRequest(query);
-  const propertyPricingRequest = isPropertyPricingRequest(query);
-  const propertyRecommendationRequest = isPropertyRecommendationRequest(query);
-  const policyRequest = isInspectionPolicyRequest(content);
-  const matches = propertyBrowseRequest || propertyPricingRequest || propertyRecommendationRequest
-    ? await listDemoProperties(business._id)
-    : policyRequest
-      ? await findDemoKnowledge(business._id, /inspection|payment|business hours/i)
-      : await searchDemoKnowledge(business._id, query);
-
-  if (propertyBrowseRequest || propertyPricingRequest || propertyRecommendationRequest) {
-    const location = matches
-      .map((match) => match.content.match(/Location:\s*([^.]+)/i)?.[1]?.trim())
-      .find((candidate) => candidate && new RegExp(`\\b${candidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(query));
-    const relevantMatches = location
-      ? matches.filter((match) => match.content.toLowerCase().includes(`location: ${location.toLowerCase()}`))
-      : matches;
-    const introduction = location
-      ? `Of course. I found this sample home in ${location} that may suit what you’re looking for:`
-      : propertyPricingRequest
-        ? 'Of course. Here are the sample homes and prices currently available in this demo:'
-        : propertyRecommendationRequest
-          ? 'Of course. Here are a few sample homes that may be a good place to start:'
-          : 'Of course. Here are a few homes currently available in this demo:';
-    const propertyCards = relevantMatches.flatMap((match): DemoPropertyCard[] => {
-      const property = match.content.match(/^(.*?)\.\s*Location:\s*(.*?)\.\s*Price:\s*(.+)$/i);
-      if (!property) return [];
-      const location = property[2].trim();
-      return [{
-        title: property[1].trim(),
-        location,
-        price: property[3].trim(),
-        media: (propertyImages[location.toLowerCase()] ?? []).map((src) => ({ src, type: 'image' as const })),
-      }];
-    });
-    const reply = propertyCards.length ? introduction : DEMO_FALLBACK_MESSAGE;
-    return sendImmediateReply(reply, 'search_knowledge', propertyCards);
+  const knownReply = getDemoSalesReply(content, prior);
+  if (knownReply) {
+    if (onEvent) sendDemoSalesReply(knownReply, onEvent);
+    await AgentAction.create({ businessId: business._id, conversationId: conversation._id, actionType: 'search_knowledge', status: 'SUCCESS', payload: { query: content.slice(0, 500) }, result: 'Answered from approved demo sales flow' });
+    return saveReply(knownReply.reply);
   }
 
-  if (policyRequest && matches.length) {
-    const reply = `Of course. Here are the viewing and payment details:\n\n${matches.map((match) => `• ${match.content}`).join('\n\n')}\n\nWould you like help arranging a viewing?`;
-    return sendImmediateReply(reply);
-  }
-
-  const knowledgeAction = AgentAction.create({ businessId: business._id, conversationId: conversation._id, actionType: 'search_knowledge', status: 'SUCCESS', payload: { query: content.slice(0, 500) }, result: `${matches.length} approved knowledge matches` });
   let streamedContent = '';
   try {
-    // Include the complete small demo catalog to support natural phrasing and follow-ups.
     const approvedKnowledge = await getDemoKnowledge(business._id);
     const provider = createAIProvider();
-    const input: AIInput = {
-      temperature: 0.2,
-      messages: [
-        { role: 'system', content: systemPrompt(approvedKnowledge.map((match) => match.content).join('\n')) },
-        ...recent.slice(0, 12).reverse().map((message) => ({ role: message.role === 'customer' ? 'user' as const : 'assistant' as const, content: message.content })),
-      ],
-    };
+    const input: AIInput = { temperature: 0.2, messages: [
+      { role: 'system', content: systemPrompt(approvedKnowledge.map(match => match.content).join('\n')) },
+      ...prior.slice(-12).map(turn => ({ role: turn.role === 'user' || turn.role === 'customer' ? 'user' as const : 'assistant' as const, content: turn.content })),
+      { role: 'user', content },
+    ] };
     const response = provider.generateResponseStream
-      ? await provider.generateResponseStream(input, (token) => {
-        streamedContent += token;
-        onEvent?.({ type: 'text', text: token });
-      })
+      ? await provider.generateResponseStream(input, token => { streamedContent += token; onEvent?.({ type: 'text', text: token }); })
       : await provider.generateResponse(input);
-    const generatedReply = response.content.trim();
-    if (!generatedReply) throw new Error('AI provider returned an empty demo response.');
-    const reply = generatedReply;
-    if (!provider.generateResponseStream) {
-      streamedContent = reply;
-      onEvent?.({ type: 'text', text: reply });
-    }
-    await Promise.all([
-      Message.create({ businessId: business._id, conversationId: conversation._id, role: 'assistant', content: reply }),
-      knowledgeAction,
-    ]);
-    return { reply, conversationId };
+    const reply = response.content.trim();
+    if (!reply) throw new Error('AI provider returned an empty demo response.');
+    if (!provider.generateResponseStream) onEvent?.({ type: 'text', text: reply });
+    onEvent?.({ type: 'guidance', ...getDemoGuidance(content, prior), requestType: 'enquiry' });
+    return saveReply(reply);
   } catch (error) {
     console.error('[sales-engine] demo workflow failed', error);
-    const reply = streamedContent
-      ? `${streamedContent.trimEnd()}\n\n${DEMO_SERVICE_ERROR_MESSAGE}`
-      : DEMO_SERVICE_ERROR_MESSAGE;
-    if (onEvent) onEvent({ type: 'text', text: streamedContent ? `\n\n${DEMO_SERVICE_ERROR_MESSAGE}` : reply });
-    await Promise.all([
-      Message.create({ businessId: business._id, conversationId: conversation._id, role: 'assistant', content: reply }),
-      knowledgeAction,
-    ]);
-    return { reply, conversationId };
+    const reply = streamedContent ? streamedContent.trimEnd() + '\n\n' + DEMO_SERVICE_ERROR_MESSAGE : DEMO_SERVICE_ERROR_MESSAGE;
+    onEvent?.({ type: 'text', text: streamedContent ? '\n\n' + DEMO_SERVICE_ERROR_MESSAGE : reply });
+    onEvent?.({ type: 'guidance', ...getDemoGuidance(content, prior), requestType: 'enquiry' });
+    return saveReply(reply);
   }
 }
 
-export async function captureDemoLead(visitorKey: string, input: LeadScoreInput & { propertyType?: string; requirements?: string }) {
+export async function captureDemoLead(visitorKey: string, input: LeadScoreInput & { propertyType?: string; requirements?: string; viewingTime?: string }) {
   await connectToDatabase();
   const business = await ensureDemoBusiness();
-  const conversation = await Conversation.findOne({ businessId: business._id, visitorKey, channel: 'WEB' }).sort({ updatedAt: -1 });
+  let conversation = await Conversation.findOne({ businessId: business._id, visitorKey, channel: 'WEB' }).sort({ updatedAt: -1 });
+  if (!conversation) conversation = await Conversation.create({ businessId: business._id, visitorKey, channel: 'WEB', status: 'ACTIVE' });
   const score = scoreSalesLead(input);
   const interest = input.propertyType && input.location ? `${input.propertyType} / ${input.location}` : input.propertyType || input.location || 'General enquiry';
   const lead = await Lead.findOneAndUpdate(
@@ -204,7 +104,7 @@ export async function captureDemoLead(visitorKey: string, input: LeadScoreInput 
   if (input.inspectionRequested) {
     await Appointment.findOneAndUpdate(
       { businessId: business._id, leadId: lead._id, status: { $in: ['REQUESTED', 'SCHEDULED'] } },
-      { $setOnInsert: { businessId: business._id, leadId: lead._id, conversationId: conversation?._id ?? null, customer: lead.name, scheduledFor: input.timeline?.trim() || 'Inspection time to be confirmed', status: 'REQUESTED', notes: 'Website demo inspection request.', isDemo: true } },
+      { $setOnInsert: { businessId: business._id, leadId: lead._id, conversationId: conversation?._id ?? null, customer: lead.name, scheduledFor: input.viewingTime?.trim() || 'Inspection time to be confirmed', status: 'REQUESTED', notes: 'Website demo inspection request.', isDemo: true } },
       { upsert: true, new: true },
     );
     await AgentAction.create({ businessId: business._id, conversationId: conversation?._id ?? null, actionType: 'request_appointment', status: 'SUCCESS', payload: { leadId: String(lead._id) }, result: 'Inspection request created' });

@@ -3,11 +3,17 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Image from 'next/image';
 
+type PropertyMedia = {
+  src: string;
+  type: 'image' | 'video';
+  thumbnail?: string;
+};
+
 type PropertyCard = {
   title: string;
   location: string;
   price: string;
-  images: string[];
+  media: PropertyMedia[];
 };
 
 type DemoStreamEvent =
@@ -65,18 +71,18 @@ function getFollowUpPrompts(reply: string) {
   }
 
   if (/installment|payment options|payment details/i.test(reply)) {
-    return ['Show me available homes', 'Arrange a viewing'];
+    return ['Show me homes in Wuse', 'Arrange a viewing'];
   }
 
   if (/inspection|viewing/i.test(reply)) {
-    return ['What viewing times are available?', 'Show me available homes'];
+    return ['What viewing times are available?', 'Show me homes in Wuse'];
   }
 
   if (/don't have that information|not available|try again/i.test(reply)) {
-    return ['View available homes', 'Ask about prices'];
+    return ['Show me homes in Wuse', 'What are the prices in Jabi?'];
   }
 
-  return ['View available homes', 'Ask about prices'];
+  return ['Show me homes in Wuse', 'What are the prices in Jabi?'];
 }
 
 export function AISalesDemo() {
@@ -86,7 +92,7 @@ export function AISalesDemo() {
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactBusy, setContactBusy] = useState(false);
   const [contactMessage, setContactMessage] = useState('');
-  const [selectedGallery, setSelectedGallery] = useState<{ title: string; images: string[]; index: number } | null>(null);
+  const [selectedGallery, setSelectedGallery] = useState<{ title: string; items: PropertyMedia[]; index: number } | null>(null);
   const [contact, setContact] = useState({
     name: '',
     phone: '',
@@ -112,10 +118,10 @@ export function AISalesDemo() {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') setSelectedGallery(null);
       if (event.key === 'ArrowRight') {
-        setSelectedGallery((gallery) => gallery && ({ ...gallery, index: (gallery.index + 1) % gallery.images.length }));
+        setSelectedGallery((gallery) => gallery && ({ ...gallery, index: (gallery.index + 1) % gallery.items.length }));
       }
       if (event.key === 'ArrowLeft') {
-        setSelectedGallery((gallery) => gallery && ({ ...gallery, index: (gallery.index - 1 + gallery.images.length) % gallery.images.length }));
+        setSelectedGallery((gallery) => gallery && ({ ...gallery, index: (gallery.index - 1 + gallery.items.length) % gallery.items.length }));
       }
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -320,27 +326,53 @@ export function AISalesDemo() {
                 </div>
               ) : (
                 <div className="max-w-[85%] space-y-2">
-                  <p className="text-sm leading-relaxed text-kh-ink md:text-[15px] whitespace-pre-line">
-                    {message.content}
-                  </p>
-                  {message.properties?.map((property) => property.images.length > 0 && (
-                    <article key={`${property.location}-${property.title}`} className="flex max-w-md gap-3 border border-kh-rule bg-white p-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedGallery({ title: `${property.title} in ${property.location}`, images: property.images, index: 0 })}
-                        className="relative h-[76px] w-[104px] shrink-0 overflow-hidden bg-kh-soft"
-                        aria-label={`View photos of ${property.title} in ${property.location}`}
-                      >
-                        <Image src={property.images[0]} alt={`${property.title} in ${property.location}`} fill sizes="104px" className="object-cover transition-transform duration-200 hover:scale-105" />
-                        {property.images.length > 1 && <span className="absolute bottom-1 right-1 bg-black/70 px-1.5 py-0.5 font-mono text-[9px] text-white">1 / {property.images.length}</span>}
-                      </button>
-                      <div className="min-w-0 self-center">
-                        <p className="text-xs font-medium text-kh-ink">{property.title}</p>
-                        <p className="mt-1 text-xs text-kh-muted">{property.location}</p>
-                        <p className="mt-1 text-xs font-medium text-kh-green">{property.price}</p>
-                      </div>
-                    </article>
-                  ))}
+                  {message.content && (
+                    <p className="text-sm leading-relaxed text-kh-ink md:text-[15px] whitespace-pre-line">
+                      {message.content}
+                    </p>
+                  )}
+                  {message.properties && message.properties.length > 0 && (
+                    <ol className="mt-3 space-y-6">
+                      {message.properties.map((property, index) => (
+                        <li key={`${property.location}-${property.title}`} className="min-w-0">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-mono text-xs text-kh-muted">{index + 1}.</span>
+                            <h3 className="text-sm font-medium leading-snug text-kh-ink">{property.title}</h3>
+                          </div>
+                          <p className="mt-1 pl-5 text-xs text-kh-muted">{property.location}</p>
+                          <p className="mt-0.5 pl-5 text-sm font-medium text-kh-green">{property.price}</p>
+                          {property.media.length > 0 ? (
+                            <div data-lenis-prevent className="mt-3 flex gap-2 overflow-x-auto pl-5 pb-1 [scrollbar-width:thin]">
+                              {property.media.map((item, mediaIndex) => (
+                                <button
+                                  key={item.src}
+                                  type="button"
+                                  onClick={() => setSelectedGallery({ title: `${property.title} in ${property.location}`, items: property.media, index: mediaIndex })}
+                                  className="relative h-20 w-20 shrink-0 overflow-hidden bg-kh-soft"
+                                  aria-label={item.type === 'video' ? `Play video ${mediaIndex + 1} of ${property.title}` : `View photo ${mediaIndex + 1} of ${property.title}`}
+                                >
+                                  {item.type === 'image' || item.thumbnail ? (
+                                    <Image src={item.thumbnail || item.src} alt={`${property.title} in ${property.location}`} fill sizes="80px" className="object-cover transition-transform duration-200 hover:scale-105" />
+                                  ) : (
+                                    <video src={item.src} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                                  )}
+                                  {item.type === 'video' && (
+                                    <span className="absolute inset-0 grid place-items-center bg-black/30">
+                                      <span className="grid h-7 w-7 place-items-center rounded-full bg-white/90 text-[11px] text-kh-ink">▶</span>
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="ml-5 mt-3 flex h-20 w-20 items-center justify-center bg-kh-soft px-2 text-center text-[10px] text-kh-muted">
+                              No media
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
                   {message.followUps && message.followUps.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {message.followUps.map((followUp) => (
@@ -526,17 +558,21 @@ export function AISalesDemo() {
         className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 md:p-8"
         role="dialog"
         aria-modal="true"
-        aria-label={`Property photos: ${selectedGallery.title}`}
+        aria-label={`Property media: ${selectedGallery.title}`}
         onClick={(event) => { if (event.target === event.currentTarget) setSelectedGallery(null); }}
       >
         <button type="button" onClick={() => setSelectedGallery(null)} className="absolute right-4 top-4 z-10 grid h-10 w-10 place-items-center border border-white/50 text-2xl text-white" aria-label="Close photo viewer">×</button>
         <div className="relative h-[min(76svh,760px)] w-full max-w-5xl">
-          <Image src={selectedGallery.images[selectedGallery.index]} alt={`${selectedGallery.title}, photo ${selectedGallery.index + 1}`} fill sizes="(max-width: 768px) 100vw, 80vw" className="object-contain" />
+          {selectedGallery.items[selectedGallery.index].type === 'video' ? (
+            <video src={selectedGallery.items[selectedGallery.index].src} controls autoPlay className="h-full w-full object-contain" aria-label={`${selectedGallery.title}, video ${selectedGallery.index + 1}`} />
+          ) : (
+            <Image src={selectedGallery.items[selectedGallery.index].src} alt={`${selectedGallery.title}, photo ${selectedGallery.index + 1}`} fill sizes="(max-width: 768px) 100vw, 80vw" className="object-contain" />
+          )}
         </div>
-        {selectedGallery.images.length > 1 && <>
-          <button type="button" onClick={() => setSelectedGallery((gallery) => gallery && ({ ...gallery, index: (gallery.index - 1 + gallery.images.length) % gallery.images.length }))} className="absolute left-3 top-1/2 -translate-y-1/2 border border-white/50 bg-black/40 px-3 py-2 text-white" aria-label="Previous photo">←</button>
-          <button type="button" onClick={() => setSelectedGallery((gallery) => gallery && ({ ...gallery, index: (gallery.index + 1) % gallery.images.length }))} className="absolute right-3 top-1/2 -translate-y-1/2 border border-white/50 bg-black/40 px-3 py-2 text-white" aria-label="Next photo">→</button>
-          <p className="absolute bottom-5 left-1/2 -translate-x-1/2 font-mono text-xs text-white">{selectedGallery.index + 1} / {selectedGallery.images.length}</p>
+        {selectedGallery.items.length > 1 && <>
+          <button type="button" onClick={() => setSelectedGallery((gallery) => gallery && ({ ...gallery, index: (gallery.index - 1 + gallery.items.length) % gallery.items.length }))} className="absolute left-3 top-1/2 -translate-y-1/2 border border-white/50 bg-black/40 px-3 py-2 text-white" aria-label="Previous item">←</button>
+          <button type="button" onClick={() => setSelectedGallery((gallery) => gallery && ({ ...gallery, index: (gallery.index + 1) % gallery.items.length }))} className="absolute right-3 top-1/2 -translate-y-1/2 border border-white/50 bg-black/40 px-3 py-2 text-white" aria-label="Next item">→</button>
+          <p className="absolute bottom-5 left-1/2 -translate-x-1/2 font-mono text-xs text-white">{selectedGallery.index + 1} / {selectedGallery.items.length}</p>
         </>}
       </div>
     )}

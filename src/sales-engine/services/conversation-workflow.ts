@@ -13,7 +13,7 @@ export type DemoPropertyCard = {
   title: string;
   location: string;
   price: string;
-  images: string[];
+  media: Array<{ src: string; type: 'image' | 'video'; thumbnail?: string }>;
 };
 
 export type DemoStreamEvent =
@@ -113,12 +113,10 @@ export async function replyToDemoVisitor(visitorKey: string, content: string, on
         title: property[1].trim(),
         location,
         price: property[3].trim(),
-        images: propertyImages[location.toLowerCase()] ?? [],
+        media: (propertyImages[location.toLowerCase()] ?? []).map((src) => ({ src, type: 'image' as const })),
       }];
     });
-    const reply = propertyCards.length
-      ? `${introduction}\n\n${propertyCards.map((property) => `• ${property.title}\n  Location: ${property.location}\n  Price: ${property.price}`).join('\n\n')}\n\nWould you like more details about one, or help arranging a viewing?`
-      : DEMO_FALLBACK_MESSAGE;
+    const reply = propertyCards.length ? introduction : DEMO_FALLBACK_MESSAGE;
     return sendImmediateReply(reply, 'search_knowledge', propertyCards);
   }
 

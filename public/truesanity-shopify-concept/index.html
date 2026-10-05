@@ -1,0 +1,1152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AURÉ — Fine Jewellery & Atelier</title>
+<meta name="description" content="AURÉ — everyday luxury. Fine jewellery and ready-to-wear, crafted in small batches.">
+<style>
+:root{
+  --ivory:#FBF8F3;
+  --cream:#F2ECE3;
+  --espresso:#2A241F;
+  --warm-grey:#8A8178;
+  --gold:#C6A15B;
+  --blush:#E8D8CE;
+  --white:#fff;
+  --line:rgba(42,36,31,.12);
+  --radius:2px;
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  color:var(--espresso);
+  background:var(--ivory);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:15px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+img{display:block;max-width:100%}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+input{font:inherit}
+a{color:inherit;text-decoration:none}
+.serif{font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;font-weight:400;letter-spacing:-.02em}
+.eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--warm-grey);margin-bottom:18px}
+
+/* ---------- Announcement ---------- */
+.announce{
+  background:var(--espresso);color:var(--ivory);
+  text-align:center;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;padding:11px 16px;
+  position:relative;overflow:hidden;height:38px;
+}
+.announce span{
+  position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  opacity:0;transition:opacity .6s var(--ease);
+  white-space:nowrap;
+}
+.announce span.on{opacity:1}
+
+/* ---------- Header ---------- */
+.header{
+  position:sticky;top:0;z-index:30;
+  background:rgba(251,248,243,.92);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.nav{
+  max-width:1320px;margin:auto;
+  display:grid;grid-template-columns:1fr auto 1fr;
+  align-items:center;gap:20px;
+  padding:18px 28px;
+}
+.nav-left,.nav-right{display:flex;align-items:center;gap:18px}
+.nav-right{justify-content:flex-end}
+.brand{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:26px;letter-spacing:.18em;
+  text-align:center;line-height:1;
+}
+.brand small{
+  display:block;font-family:Inter,sans-serif;
+  font-size:8px;letter-spacing:.32em;
+  color:var(--warm-grey);margin-top:6px;
+}
+.icon-btn{
+  width:40px;height:40px;display:grid;place-items:center;
+  border-radius:50%;transition:background .2s var(--ease);
+  position:relative;
+}
+.icon-btn:hover{background:var(--cream)}
+.icon-btn svg{width:18px;height:18px;stroke:var(--espresso);fill:none;stroke-width:1.5}
+.cart-count{
+  position:absolute;top:4px;right:4px;
+  background:var(--gold);color:#fff;
+  font-size:9px;font-weight:600;
+  min-width:16px;height:16px;border-radius:50%;
+  display:grid;place-items:center;padding:0 3px;
+  transform:scale(0);transition:transform .25s var(--ease);
+}
+.cart-count.show{transform:scale(1)}
+
+/* Mega nav */
+.mega{
+  max-width:1320px;margin:auto;
+  padding:0 28px 16px;
+  display:flex;gap:36px;justify-content:center;
+  font-size:13px;
+}
+.mega a{
+  position:relative;padding:6px 0;
+  transition:color .2s;
+}
+.mega a::after{
+  content:"";position:absolute;left:0;bottom:0;
+  width:0;height:1px;background:var(--gold);
+  transition:width .3s var(--ease);
+}
+.mega a:hover{color:var(--gold)}
+.mega a:hover::after{width:100%}
+
+.menu-toggle{display:none}
+
+/* ---------- Buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  gap:8px;
+  padding:15px 28px;
+  font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;font-weight:500;
+  border:1px solid var(--espresso);
+  background:var(--espresso);color:var(--ivory);
+  border-radius:var(--radius);
+  transition:transform .2s var(--ease),background .2s,color .2s,border-color .2s;
+  cursor:pointer;
+}
+.btn:hover{transform:translateY(-2px)}
+.btn.ghost{background:transparent;color:var(--espresso)}
+.btn.ghost:hover{background:var(--espresso);color:var(--ivory)}
+.btn.on-dark{background:var(--ivory);color:var(--espresso);border-color:var(--ivory)}
+.btn.on-dark.ghost{background:transparent;color:var(--ivory);border-color:var(--ivory)}
+.btn.on-dark.ghost:hover{background:var(--ivory);color:var(--espresso)}
+.btn.block{width:100%}
+
+/* ---------- Hero ---------- */
+.hero{
+  max-width:1320px;margin:auto;
+  padding:22px 28px 90px;
+}
+.hero-grid{
+  display:grid;grid-template-columns:1fr 1fr;
+  min-height:640px;
+  background:var(--cream);
+  border-radius:var(--radius);
+  overflow:hidden;
+}
+.hero-copy{
+  padding:80px clamp(32px,6vw,88px);
+  display:flex;flex-direction:column;justify-content:center;
+}
+.hero h1{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:clamp(44px,5.4vw,80px);
+  line-height:.98;letter-spacing:-.035em;
+  margin-bottom:26px;
+}
+.hero p{
+  color:var(--warm-grey);
+  max-width:440px;line-height:1.75;
+  margin-bottom:30px;
+}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap}
+.hero-img{
+  background:url('https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=1400&q=85') center/cover;
+  min-height:500px;
+  animation:kenburns 18s ease-in-out infinite alternate;
+}
+@keyframes kenburns{
+  from{transform:scale(1)}
+  to{transform:scale(1.06)}
+}
+
+/* ---------- Section ---------- */
+.section{max-width:1320px;margin:auto;padding:90px 28px}
+.section-head{
+  display:flex;align-items:flex-end;justify-content:space-between;
+  margin-bottom:36px;gap:24px;flex-wrap:wrap;
+}
+.section-head h2{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:clamp(30px,3.6vw,52px);
+  line-height:1;letter-spacing:-.03em;
+}
+.section-head p{
+  color:var(--warm-grey);max-width:380px;
+  font-size:14px;line-height:1.65;
+}
+.section-head .more{
+  font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+  border-bottom:1px solid var(--espresso);padding-bottom:3px;
+  transition:color .2s,border-color .2s;
+}
+.section-head .more:hover{color:var(--gold);border-color:var(--gold)}
+
+/* ---------- Product Grid ---------- */
+.products{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:22px;
+}
+.product{
+  background:var(--white);
+  border-radius:var(--radius);
+  overflow:hidden;
+  transition:transform .3s var(--ease);
+  position:relative;
+}
+.product:hover{transform:translateY(-4px)}
+.product-img{
+  aspect-ratio:4/5;background-size:cover;background-position:center;
+  position:relative;overflow:hidden;
+}
+.product-img .img-b{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity .5s var(--ease)}
+.product:hover .product-img .img-b{opacity:1}
+.tag{
+  position:absolute;top:14px;left:14px;
+  background:var(--ivory);color:var(--espresso);
+  font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+  padding:7px 10px;z-index:2;font-weight:600;
+}
+.tag.new{background:var(--gold);color:#fff}
+.wish{
+  position:absolute;top:12px;right:12px;z-index:2;
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(251,248,243,.9);
+  display:grid;place-items:center;
+  transition:background .2s,transform .2s;
+}
+.wish:hover{background:var(--white);transform:scale(1.08)}
+.wish svg{width:16px;height:16px;fill:none;stroke:var(--espresso);stroke-width:1.5;transition:.2s}
+.wish.on svg{fill:var(--gold);stroke:var(--gold)}
+.quick-add{
+  position:absolute;left:14px;right:14px;bottom:14px;
+  background:var(--espresso);color:var(--ivory);
+  padding:13px;text-align:center;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  transform:translateY(calc(100% + 20px));
+  transition:transform .35s var(--ease);
+  border-radius:var(--radius);
+  width:auto;
+}
+.product:hover .quick-add{transform:translateY(0)}
+.quick-add:hover{background:var(--gold)}
+.product-info{padding:18px 18px 22px}
+.product-name{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:17px;margin-bottom:6px;letter-spacing:-.01em;
+}
+.product-meta{
+  display:flex;justify-content:space-between;
+  font-size:12px;color:var(--warm-grey);gap:8px;
+}
+
+/* ---------- Category tiles ---------- */
+.cats{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.cat{
+  position:relative;aspect-ratio:3/4;overflow:hidden;
+  background-size:cover;background-position:center;
+  border-radius:var(--radius);
+  display:flex;align-items:flex-end;
+  transition:transform .4s var(--ease);
+}
+.cat:hover{transform:scale(1.015)}
+.cat::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(42,36,31,.55),transparent 55%);
+}
+.cat-inner{
+  position:relative;z-index:2;padding:28px;color:var(--ivory);
+}
+.cat-inner h3{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:24px;margin-bottom:6px;
+}
+.cat-inner span{
+  font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+  opacity:.85;
+}
+
+/* ---------- Story ---------- */
+.story{
+  display:grid;grid-template-columns:1fr 1fr;
+  background:var(--espresso);color:var(--ivory);
+  min-height:560px;border-radius:var(--radius);overflow:hidden;
+}
+.story-img{
+  background:url('https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=1400&q=85') center/cover;
+  min-height:460px;
+}
+.story-copy{padding:80px clamp(32px,5vw,72px);display:flex;flex-direction:column;justify-content:center}
+.story-copy .eyebrow{color:var(--gold)}
+.story-copy h2{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:clamp(34px,3.6vw,54px);line-height:1.05;
+  margin-bottom:22px;letter-spacing:-.03em;
+}
+.story-copy p{color:rgba(251,248,243,.7);line-height:1.85;max-width:460px;margin-bottom:26px}
+
+/* ---------- PDP ---------- */
+.pdp{display:grid;grid-template-columns:1.15fr .85fr;gap:60px;align-items:flex-start}
+.gallery{position:sticky;top:120px}
+.gallery-main{
+  aspect-ratio:1/1;background-size:cover;background-position:center;
+  border-radius:var(--radius);overflow:hidden;
+  cursor:zoom-in;position:relative;
+}
+.gallery-main::after{
+  content:"Hover to zoom";
+  position:absolute;bottom:14px;right:14px;
+  background:rgba(251,248,243,.9);color:var(--espresso);
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  padding:6px 10px;opacity:0;transition:opacity .3s;
+}
+.gallery-main:hover::after{opacity:1}
+.thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+.thumb{
+  aspect-ratio:1;background-size:cover;background-position:center;
+  border:1px solid transparent;border-radius:var(--radius);
+  cursor:pointer;transition:border-color .2s;
+}
+.thumb.active{border-color:var(--espresso)}
+
+.pdp-info{padding-top:8px}
+.pdp-info .breadcrumb{
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--warm-grey);margin-bottom:20px;
+}
+.pdp-info .breadcrumb span{margin:0 8px;opacity:.5}
+.pdp-title{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:clamp(34px,3.6vw,52px);line-height:1;
+  letter-spacing:-.03em;margin-bottom:14px;
+}
+.price-row{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.price{font-size:22px;font-weight:500}
+.pay-later{font-size:12px;color:var(--warm-grey)}
+.pdp-desc{color:var(--warm-grey);line-height:1.75;margin:20px 0 26px;font-size:14px}
+
+.option{margin:24px 0}
+.option label{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-size:11px;text-transform:uppercase;letter-spacing:.16em;
+  margin-bottom:12px;color:var(--espresso);
+}
+.option label a{color:var(--warm-grey);text-decoration:underline;letter-spacing:.02em;text-transform:none;font-size:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{
+  border:1px solid var(--line);background:var(--white);
+  padding:11px 16px;font-size:12px;
+  border-radius:var(--radius);transition:.2s;
+  display:inline-flex;align-items:center;gap:8px;
+}
+.chip:hover{border-color:var(--espresso)}
+.chip.active{border-color:var(--espresso);background:var(--espresso);color:var(--ivory)}
+.chip .dot{width:12px;height:12px;border-radius:50%;border:1px solid rgba(0,0,0,.1)}
+
+.stock{
+  font-size:12px;color:var(--warm-grey);margin:18px 0 8px;
+  display:flex;align-items:center;gap:8px;
+}
+.stock .pulse{
+  width:6px;height:6px;border-radius:50%;background:#c66;
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{50%{opacity:.4}}
+
+.qty-row{display:flex;gap:10px;margin-top:22px}
+.qty{
+  display:flex;border:1px solid var(--line);
+  background:var(--white);border-radius:var(--radius);
+}
+.qty button{width:46px;height:50px;transition:background .2s}
+.qty button:hover{background:var(--cream)}
+.qty input{width:44px;text-align:center;border:0;outline:0;background:transparent}
+.add-btn{flex:1;height:50px}
+
+.trust{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:0;margin-top:28px;
+  border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden;
+}
+.trust div{
+  padding:16px 10px;text-align:center;
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--warm-grey);border-right:1px solid var(--line);
+  background:var(--white);
+}
+.trust div:last-child{border-right:0}
+
+.accordion{margin-top:34px;border-top:1px solid var(--line)}
+.acc-item{border-bottom:1px solid var(--line)}
+.acc-head{
+  width:100%;display:flex;justify-content:space-between;align-items:center;
+  padding:20px 0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+  text-align:left;
+}
+.acc-head::after{content:"+";font-size:18px;color:var(--warm-grey);transition:.2s}
+.acc-item.open .acc-head::after{transform:rotate(45deg)}
+.acc-body{
+  max-height:0;overflow:hidden;transition:max-height .35s var(--ease);
+  color:var(--warm-grey);font-size:14px;line-height:1.75;
+}
+.acc-body-inner{padding-bottom:22px}
+.acc-item.open .acc-body{max-height:400px}
+
+/* ---------- Reviews ---------- */
+.reviews{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:22px;
+}
+.review{
+  background:var(--white);padding:30px;border-radius:var(--radius);
+  border:1px solid var(--line);
+}
+.stars{color:var(--gold);font-size:13px;letter-spacing:2px;margin-bottom:12px}
+.review p{font-size:14px;line-height:1.7;margin-bottom:16px;color:#3c352e}
+.review .who{font-size:12px;color:var(--warm-grey);letter-spacing:.06em}
+.review .verified{color:var(--gold);margin-left:6px;font-size:11px}
+
+/* ---------- UGC ---------- */
+.ugc{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.ugc .tile{
+  aspect-ratio:1;background-size:cover;background-position:center;
+  position:relative;overflow:hidden;border-radius:var(--radius);
+  transition:transform .4s var(--ease);
+}
+.ugc .tile:hover{transform:scale(1.03)}
+.ugc .tile span{
+  position:absolute;left:12px;bottom:12px;
+  color:#fff;font-size:11px;letter-spacing:.1em;
+  text-shadow:0 1px 3px rgba(0,0,0,.5);
+}
+
+/* ---------- Newsletter ---------- */
+.newsletter{
+  background:var(--cream);
+  padding:90px 28px;
+  text-align:center;
+}
+.newsletter h2{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:clamp(30px,3.6vw,48px);line-height:1.05;
+  letter-spacing:-.03em;margin-bottom:16px;
+}
+.newsletter p{color:var(--warm-grey);margin-bottom:32px}
+.newsletter form{
+  display:flex;gap:0;max-width:480px;margin:auto;
+  background:var(--white);border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden;
+}
+.newsletter input{
+  flex:1;padding:16px 20px;border:0;outline:0;background:transparent;
+  font-size:14px;
+}
+.newsletter button{
+  padding:0 26px;background:var(--espresso);color:var(--ivory);
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  transition:background .2s;
+}
+.newsletter button:hover{background:var(--gold)}
+
+/* ---------- Footer ---------- */
+.footer{
+  background:var(--espresso);color:var(--ivory);
+  padding:70px 28px 40px;
+}
+.footer-inner{
+  max-width:1320px;margin:auto;
+  display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:50px;
+  margin-bottom:60px;
+}
+.footer h4{
+  font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:20px;
+}
+.footer .wordmark{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:32px;letter-spacing:.2em;margin-bottom:18px;
+}
+.footer p{color:rgba(251,248,243,.6);font-size:13px;line-height:1.75;max-width:340px}
+.footer ul{list-style:none;display:flex;flex-direction:column;gap:12px}
+.footer a{color:rgba(251,248,243,.7);font-size:13px;transition:color .2s}
+.footer a:hover{color:var(--gold)}
+.footer-legal{
+  border-top:1px solid rgba(251,248,243,.12);
+  padding-top:30px;
+  display:flex;justify-content:space-between;
+  font-size:11px;color:rgba(251,248,243,.45);
+  letter-spacing:.1em;text-transform:uppercase;
+  flex-wrap:wrap;gap:12px;
+}
+
+/* ---------- Cart Drawer ---------- */
+.cart-shade{
+  position:fixed;inset:0;background:rgba(42,36,31,.4);
+  opacity:0;pointer-events:none;transition:opacity .3s var(--ease);z-index:80;
+}
+.cart-shade.open{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;top:0;right:0;height:100%;width:min(440px,100vw);
+  background:var(--ivory);z-index:90;
+  transform:translateX(100%);
+  transition:transform .4s var(--ease);
+  display:flex;flex-direction:column;
+  box-shadow:-10px 0 40px rgba(42,36,31,.08);
+}
+.drawer.open{transform:none}
+.drawer-head{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:22px 24px;border-bottom:1px solid var(--line);
+}
+.drawer-head h3{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:20px;letter-spacing:-.01em;
+}
+.close-btn{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;transition:background .2s}
+.close-btn:hover{background:var(--cream)}
+.close-btn svg{width:16px;height:16px;stroke:var(--espresso);stroke-width:1.5;fill:none}
+
+.drawer-body{flex:1;overflow-y:auto;padding:20px 24px}
+.empty{
+  text-align:center;padding:60px 20px;color:var(--warm-grey);
+}
+.empty p{margin-bottom:22px;font-size:14px}
+
+.cart-item{display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--line)}
+.cart-item:last-child{border-bottom:0}
+.cart-item img{width:84px;height:104px;object-fit:cover;border-radius:var(--radius)}
+.cart-item-info{flex:1;display:flex;flex-direction:column;justify-content:space-between;min-height:104px}
+.cart-item-name{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:16px;margin-bottom:4px;
+}
+.cart-item-variant{font-size:12px;color:var(--warm-grey)}
+.cart-item-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.cart-item-qty{display:flex;align-items:center;gap:10px;font-size:13px}
+.cart-item-qty button{
+  width:26px;height:26px;border:1px solid var(--line);
+  border-radius:50%;display:grid;place-items:center;
+  transition:background .2s;font-size:13px;
+}
+.cart-item-qty button:hover{background:var(--cream)}
+.cart-item-price{font-size:14px;font-weight:500}
+.remove{
+  font-size:11px;color:var(--warm-grey);text-decoration:underline;
+  margin-top:6px;letter-spacing:.06em;
+}
+.remove:hover{color:var(--espresso)}
+
+.drawer-foot{
+  border-top:1px solid var(--line);padding:22px 24px;
+  background:var(--ivory);
+}
+.subtotal{
+  display:flex;justify-content:space-between;align-items:baseline;
+  margin-bottom:6px;font-size:14px;
+}
+.subtotal strong{font-size:18px;font-weight:500}
+.ship-note{font-size:12px;color:var(--warm-grey);margin-bottom:18px}
+.gift-row{
+  display:flex;align-items:center;gap:10px;font-size:12px;
+  color:var(--warm-grey);margin-bottom:16px;
+}
+
+/* ---------- Mobile bottom bar ---------- */
+.mobile-bar{
+  display:none;
+  position:fixed;bottom:0;left:0;right:0;z-index:60;
+  background:var(--ivory);border-top:1px solid var(--line);
+  padding:12px 14px;gap:12px;align-items:center;
+  box-shadow:0 -4px 20px rgba(42,36,31,.06);
+}
+.mobile-bar .mb-thumb{
+  width:46px;height:56px;border-radius:var(--radius);
+  background:url('https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=200&q=80') center/cover;
+  flex-shrink:0;
+}
+.mobile-bar .mb-info{flex:1;min-width:0}
+.mobile-bar .mb-info .n{
+  font-family:"Canela","Freight Display",Playfair Display,Georgia,serif;
+  font-size:14px;line-height:1.2;
+}
+.mobile-bar .mb-info .v{font-size:11px;color:var(--warm-grey)}
+.mobile-bar .btn{padding:14px 20px;font-size:10px}
+
+/* ---------- Reveal animation ---------- */
+.reveal{opacity:0;transform:translateY(20px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+.reveal.on{opacity:1;transform:none}
+
+/* ---------- Responsive ---------- */
+@media(max-width:1024px){
+  .products{grid-template-columns:repeat(3,1fr)}
+  .ugc{grid-template-columns:repeat(3,1fr)}
+  .footer-inner{grid-template-columns:1fr 1fr;gap:40px}
+}
+@media(max-width:880px){
+  .nav{padding:14px 18px;grid-template-columns:1fr auto 1fr}
+  .mega{display:none}
+  .menu-toggle{display:grid}
+  .hero{padding:14px 14px 60px}
+  .hero-grid{grid-template-columns:1fr;min-height:auto}
+  .hero-copy{padding:56px 26px}
+  .hero-img{min-height:400px}
+  .section{padding:64px 18px}
+  .products{grid-template-columns:repeat(2,1fr);gap:12px}
+  .quick-add{transform:none;position:static;width:100%;margin:0;background:var(--espresso);border-radius:0}
+  .product:hover .quick-add{transform:none}
+  .cats{grid-template-columns:1fr;gap:14px}
+  .cat{aspect-ratio:4/3}
+  .story{grid-template-columns:1fr}
+  .story-img{min-height:340px}
+  .story-copy{padding:56px 26px}
+  .pdp{grid-template-columns:1fr;gap:30px}
+  .gallery{position:static}
+  .reviews{grid-template-columns:1fr}
+  .ugc{grid-template-columns:repeat(2,1fr)}
+  .mobile-bar{display:flex}
+  body{padding-bottom:80px}
+  .trust{grid-template-columns:1fr}
+  .trust div{border-right:0;border-bottom:1px solid var(--line)}
+  .trust div:last-child{border-bottom:0}
+  .footer-inner{grid-template-columns:1fr;gap:34px}
+  .footer-legal{flex-direction:column;align-items:flex-start}
+  .section-head .more{font-size:11px}
+}
+@media(max-width:520px){
+  .brand{font-size:22px}
+  .hero-copy{padding:44px 22px}
+  .hero h1{font-size:42px}
+  .products{gap:10px}
+  .product-info{padding:14px}
+  .product-name{font-size:15px}
+  .product-meta{font-size:11px;flex-direction:column;gap:2px}
+  .newsletter form{flex-direction:column}
+  .newsletter button{padding:16px}
+  .chip{padding:10px 13px;font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .reveal{opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+
+<!-- Announcement -->
+<div class="announce" id="announce">
+  <span class="on">Complimentary worldwide shipping</span>
+  <span>New: The Autumn Edit</span>
+  <span>Gift wrapping included</span>
+</div>
+
+<!-- Header -->
+<header class="header">
+  <nav class="nav">
+    <div class="nav-left">
+      <button class="icon-btn menu-toggle" aria-label="Menu" onclick="document.getElementById('mobileMenu').classList.toggle('open')">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <button class="icon-btn" aria-label="Search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </button>
+    </div>
+    <a href="#" class="brand">AURÉ<small>FINE JEWELLERY · ATELIER</small></a>
+    <div class="nav-right">
+      <button class="icon-btn" aria-label="Account">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+      </button>
+      <button class="icon-btn" aria-label="Bag" onclick="openCart()">
+        <svg viewBox="0 0 24 24"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
+        <span class="cart-count" id="cartCount">0</span>
+      </button>
+    </div>
+  </nav>
+  <div class="mega">
+    <a href="#edit">New In</a>
+    <a href="#edit">Jewellery</a>
+    <a href="#edit">Ready-to-Wear</a>
+    <a href="#edit">Accessories</a>
+    <a href="#story">The Atelier</a>
+    <a href="#gifting">Gifting</a>
+  </div>
+</header>
+
+<main>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-grid">
+    <div class="hero-copy reveal">
+      <div class="eyebrow">The Autumn Edit</div>
+      <h1>Quietly extraordinary.</h1>
+      <p>Everyday luxury in solid gold and considered silhouettes. Made in small batches, designed to be worn for a lifetime.</p>
+      <div class="hero-actions">
+        <a class="btn" href="#edit">Shop new in</a>
+        <a class="btn ghost" href="#story">Explore the atelier</a>
+      </div>
+    </div>
+    <div class="hero-img"></div>
+  </div>
+</section>
+
+<!-- The Edit -->
+<section class="section" id="edit">
+  <div class="section-head reveal">
+    <div>
+      <div class="eyebrow">The Edit</div>
+      <h2>New this season</h2>
+    </div>
+    <p>Six pieces to layer, stack and live in — from fine gold chains to sculptural earrings.</p>
+    <a href="#" class="more">View all →</a>
+  </div>
+  <div class="products" id="productGrid"></div>
+</section>
+
+<!-- Categories -->
+<section class="section">
+  <div class="section-head reveal">
+    <div><div class="eyebrow">Browse</div><h2>Shop by category</h2></div>
+  </div>
+  <div class="cats">
+    <a class="cat reveal" style="background-image:url('https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=900&q=85')">
+      <div class="cat-inner"><h3>Fine Jewellery</h3><span>Necklaces · Rings · Earrings</span></div>
+    </a>
+    <a class="cat reveal" style="background-image:url('https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=900&q=85')">
+      <div class="cat-inner"><h3>Ready-to-Wear</h3><span>Silk · Knitwear · Dresses</span></div>
+    </a>
+    <a class="cat reveal" style="background-image:url('https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=900&q=85')">
+      <div class="cat-inner"><h3>Gifting</h3><span>Under $250 · Gift cards</span></div>
+    </a>
+  </div>
+</section>
+
+<!-- Story -->
+<section class="section" id="story">
+  <div class="story reveal">
+    <div class="story-img"></div>
+    <div class="story-copy">
+      <div class="eyebrow">Made Slowly</div>
+      <h2>Crafted in small batches, made to last.</h2>
+      <p>Every piece is designed in our studio and finished by hand. We work with recycled gold and traceable stones — because the things you wear every day should be made with care.</p>
+      <a class="btn on-dark ghost" href="#" style="width:max-content">Read our story</a>
+    </div>
+  </div>
+</section>
+
+<!-- PDP -->
+<section class="section" id="pdp">
+  <div class="pdp">
+    <div class="gallery">
+      <div class="gallery-main" id="mainImage" onmousemove="zoomMove(event)" onmouseleave="zoomOut()"></div>
+      <div class="thumbs" id="thumbs"></div>
+    </div>
+    <div class="pdp-info">
+      <div class="breadcrumb">Jewellery <span>/</span> Necklaces <span>/</span> Aria Pendant</div>
+      <h2 class="pdp-title" id="pdpName">The Aria Pendant</h2>
+      <div class="price-row">
+        <div class="price" id="price">$248</div>
+        <div class="pay-later">or 4 × $62 with Afterpay</div>
+      </div>
+      <p class="pdp-desc">A delicate solid-gold pendant on a fine cable chain — designed to be worn alone or layered. Hand-finished in our studio and shipped in a signature AURÉ box.</p>
+
+      <div class="option">
+        <label>Metal</label>
+        <div class="chips" id="metals">
+          <button class="chip active" data-name="18k Gold" data-price="248"><span class="dot" style="background:#E5C27A"></span>18k Gold</button>
+          <button class="chip" data-name="White Gold" data-price="278"><span class="dot" style="background:#E6E6E6"></span>White Gold</button>
+          <button class="chip" data-name="Rose Gold" data-price="268"><span class="dot" style="background:#E8BBA5"></span>Rose Gold</button>
+        </div>
+      </div>
+
+      <div class="option">
+        <label>Chain length <a href="#" onclick="return false">Size guide</a></label>
+        <div class="chips" id="sizes">
+          <button class="chip active" data-size="16in">16"</button>
+          <button class="chip" data-size="18in">18"</button>
+          <button class="chip" data-size="20in">20"</button>
+          <button class="chip" data-size="22in">22"</button>
+        </div>
+      </div>
+
+      <div class="stock"><span class="pulse"></span>Only 3 left in 18k Gold</div>
+
+      <div class="qty-row">
+        <div class="qty">
+          <button onclick="changeQty(-1)" aria-label="Decrease">−</button>
+          <input id="qty" value="1" readonly aria-label="Quantity">
+          <button onclick="changeQty(1)" aria-label="Increase">+</button>
+        </div>
+        <button class="btn add-btn" onclick="addToCart()">Add to bag</button>
+      </div>
+
+      <div class="trust">
+        <div>Free shipping</div>
+        <div>30-day returns</div>
+        <div>2-year warranty</div>
+      </div>
+
+      <div class="accordion">
+        <div class="acc-item">
+          <button class="acc-head" onclick="toggleAcc(this)">Details & Materials</button>
+          <div class="acc-body"><div class="acc-body-inner">Solid 18k recycled gold. Pendant 8mm. Cable chain, adjustable length. Hallmarked. Made in small batches in our atelier.</div></div>
+        </div>
+        <div class="acc-item">
+          <button class="acc-head" onclick="toggleAcc(this)">Shipping & Returns</button>
+          <div class="acc-body"><div class="acc-body-inner">Complimentary worldwide shipping on all orders. Delivered in 2–5 business days. Free returns within 30 days — no questions asked.</div></div>
+        </div>
+        <div class="acc-item">
+          <button class="acc-head" onclick="toggleAcc(this)">Care</button>
+          <div class="acc-body"><div class="acc-body-inner">Store in the pouch provided. Avoid contact with water, perfumes and creams. Polish gently with a soft cloth. We offer complimentary cleaning for life.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Reviews -->
+<section class="section">
+  <div class="section-head reveal">
+    <div><div class="eyebrow">Loved by you</div><h2>What people are saying</h2></div>
+  </div>
+  <div class="reviews">
+    <div class="review reveal">
+      <div class="stars">★★★★★</div>
+      <p>"The weight and finish feel far beyond the price. It's become my every-day piece."</p>
+      <div class="who">Emma R. <span class="verified">· Verified</span></div>
+    </div>
+    <div class="review reveal">
+      <div class="stars">★★★★★</div>
+      <p>"Beautifully packaged, arrived quickly, and the gold is a perfect warm tone. Layering it already."</p>
+      <div class="who">Priya M. <span class="verified">· Verified</span></div>
+    </div>
+    <div class="review reveal">
+      <div class="stars">★★★★★</div>
+      <p>"Bought as a gift for my sister — she hasn't taken it off. Will be back for the earrings."</p>
+      <div class="who">Sophie L. <span class="verified">· Verified</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- UGC -->
+<section class="section" id="gifting">
+  <div class="section-head reveal">
+    <div><div class="eyebrow">@aure.atelier</div><h2>Worn by you</h2></div>
+    <a href="#" class="more">Follow on Instagram →</a>
+  </div>
+  <div class="ugc">
+    <div class="tile reveal" style="background-image:url('https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=500&q=80')"><span>@emma.r</span></div>
+    <div class="tile reveal" style="background-image:url('https://images.unsplash.com/photo-1573408301185-9146fe634ad0?auto=format&fit=crop&w=500&q=80')"><span>@priya</span></div>
+    <div class="tile reveal" style="background-image:url('https://images.unsplash.com/photo-1599643477877-530eb83abc8e?auto=format&fit=crop&w=500&q=80')"><span>@sophie.l</span></div>
+    <div class="tile reveal" style="background-image:url('https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=500&q=80')"><span>@noor</span></div>
+    <div class="tile reveal" style="background-image:url('https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=500&q=80')"><span>@maya</span></div>
+    <div class="tile reveal" style="background-image:url('https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=500&q=80')"><span>@jules</span></div>
+  </div>
+</section>
+
+<!-- Newsletter -->
+<section class="newsletter">
+  <div class="reveal">
+    <h2>Join the list.</h2>
+    <p>10% off your first order, plus early access to new drops.</p>
+    <form onsubmit="event.preventDefault();this.querySelector('input').value='';this.querySelector('button').textContent='Subscribed ✓'">
+      <input type="email" placeholder="your@email.com" required>
+      <button type="submit">Subscribe</button>
+    </form>
+  </div>
+</section>
+
+</main>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div>
+      <div class="wordmark">AURÉ</div>
+      <p>Everyday luxury in fine jewellery and considered ready-to-wear. Designed in small batches, made to last.</p>
+    </div>
+    <div>
+      <h4>Shop</h4>
+      <ul>
+        <li><a href="#edit">New In</a></li>
+        <li><a href="#edit">Jewellery</a></li>
+        <li><a href="#edit">Ready-to-Wear</a></li>
+        <li><a href="#gifting">Gifting</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>About</h4>
+      <ul>
+        <li><a href="#story">The Atelier</a></li>
+        <li><a href="#">Sustainability</a></li>
+        <li><a href="#">Journal</a></li>
+        <li><a href="#">Stockists</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Help</h4>
+      <ul>
+        <li><a href="#">Shipping</a></li>
+        <li><a href="#">Returns</a></li>
+        <li><a href="#">Size Guide</a></li>
+        <li><a href="#">Contact</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-legal">
+    <span>© 2026 AURÉ Atelier · All rights reserved</span>
+    <span>Privacy · Terms · Cookies</span>
+  </div>
+</footer>
+
+<!-- Cart -->
+<div class="cart-shade" id="cartShade" onclick="closeCart()"></div>
+<aside class="drawer" id="cartDrawer" aria-label="Shopping bag">
+  <div class="drawer-head">
+    <h3>Your bag</h3>
+    <button class="close-btn" aria-label="Close" onclick="closeCart()">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body" id="cartBody">
+    <div class="empty">
+      <p>Your bag is empty.</p>
+      <button class="btn" onclick="closeCart()">Shop new in</button>
+    </div>
+  </div>
+  <div class="drawer-foot" id="cartFoot" style="display:none">
+    <div class="subtotal"><span>Subtotal</span><strong id="subtotal">$0</strong></div>
+    <div class="ship-note">Shipping & taxes calculated at checkout.</div>
+    <label class="gift-row"><input type="checkbox"> Add a gift message</label>
+    <button class="btn block">Proceed to checkout</button>
+  </div>
+</aside>
+
+<!-- Mobile bottom bar -->
+<div class="mobile-bar">
+  <div class="mb-thumb"></div>
+  <div class="mb-info">
+    <div class="n" id="mbName">The Aria Pendant</div>
+    <div class="v" id="mbVariant">18k Gold · 16"</div>
+  </div>
+  <button class="btn" onclick="addToCart()">Add</button>
+</div>
+
+<script>
+/* ---------- Product grid data ---------- */
+const PRODUCTS = [
+  {name:'The Aria Pendant', meta:'18k Gold', price:'$248', img:'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=85', imgB:'https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=800&q=85', tag:'Bestseller', tagClass:''},
+  {name:'The Mila Hoops', meta:'18k Gold', price:'$186', img:'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=800&q=85', imgB:'https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=800&q=85', tag:'', tagClass:''},
+  {name:'The Sena Ring', meta:'White Gold', price:'$320', img:'https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=800&q=85', imgB:'https://images.unsplash.com/photo-1598560917807-1bae44bd2be8?auto=format&fit=crop&w=800&q=85', tag:'New', tagClass:'new'},
+  {name:'The Lune Chain', meta:'Rose Gold', price:'$412', img:'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=800&q=85', imgB:'https://images.unsplash.com/photo-1573408301185-9146fe634ad0?auto=format&fit=crop&w=800&q=85', tag:'', tagClass:''},
+  {name:'The Vera Studs', meta:'18k Gold', price:'$164', img:'https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=800&q=85', imgB:'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=800&q=85', tag:'', tagClass:''},
+  {name:'The Noor Bracelet', meta:'18k Gold', price:'$296', img:'https://images.unsplash.com/photo-1573408301185-9146fe634ad0?auto=format&fit=crop&w=800&q=85', imgB:'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=800&q=85', tag:'', tagClass:''},
+  {name:'The Ivy Layer', meta:'18k Gold', price:'$384', img:'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=800&q=85', imgB:'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=85', tag:'', tagClass:''},
+  {name:'The Sable Cuff', meta:'Sterling Silver', price:'$228', img:'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=800&q=85', imgB:'https://images.unsplash.com/photo-1573408301185-9146fe634ad0?auto=format&fit=crop&w=800&q=85', tag:'New', tagClass:'new'}
+];
+
+const grid = document.getElementById('productGrid');
+grid.innerHTML = PRODUCTS.map(p => `
+  <article class="product reveal">
+    <div class="product-img" style="background-image:url('${p.img}')">
+      ${p.tag ? `<span class="tag ${p.tagClass}">${p.tag}</span>` : ''}
+      <button class="wish" aria-label="Wishlist" onclick="toggleWish(this)">
+        <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg>
+      </button>
+      <div class="img-b" style="background-image:url('${p.imgB}')"></div>
+      <button class="quick-add" onclick="event.stopPropagation()">Quick add</button>
+    </div>
+    <div class="product-info">
+      <div class="product-name">${p.name}</div>
+      <div class="product-meta"><span>${p.meta}</span><span>${p.price}</span></div>
+    </div>
+  </article>
+`).join('');
+
+/* ---------- PDP gallery ---------- */
+const GALLERY = [
+  'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=1400&q=85',
+  'https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=1400&q=85',
+  'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=1400&q=85',
+  'https://images.unsplash.com/photo-1573408301185-9146fe634ad0?auto=format&fit=crop&w=1400&q=85'
+];
+const mainImage = document.getElementById('mainImage');
+const thumbs = document.getElementById('thumbs');
+mainImage.style.backgroundImage = `url('${GALLERY[0]}')`;
+thumbs.innerHTML = GALLERY.map((g,i)=>`
+  <div class="thumb ${i===0?'active':''}" data-src="${g}" style="background-image:url('${g.replace('w=1400','w=400')}')"></div>
+`).join('');
+thumbs.querySelectorAll('.thumb').forEach(t=>{
+  t.addEventListener('click',()=>{
+    thumbs.querySelectorAll('.thumb').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    mainImage.style.backgroundImage = `url('${t.dataset.src}')`;
+  });
+});
+function zoomMove(e){
+  const r = mainImage.getBoundingClientRect();
+  const x = ((e.clientX - r.left) / r.width) * 100;
+  const y = ((e.clientY - r.top) / r.height) * 100;
+  mainImage.style.backgroundSize = '180%';
+  mainImage.style.backgroundPosition = `${x}% ${y}%`;
+}
+function zoomOut(){
+  mainImage.style.backgroundSize = 'cover';
+  mainImage.style.backgroundPosition = 'center';
+}
+
+/* ---------- Variants ---------- */
+const state = { metal:'18k Gold', size:'16"', price:248, qty:1, name:'The Aria Pendant' };
+
+document.querySelectorAll('#metals .chip').forEach(c=>{
+  c.addEventListener('click',()=>{
+    document.querySelectorAll('#metals .chip').forEach(x=>x.classList.remove('active'));
+    c.classList.add('active');
+    state.metal = c.dataset.name;
+    state.price = parseInt(c.dataset.price,10);
+    updatePrice();
+    updateMobileVariant();
+  });
+});
+document.querySelectorAll('#sizes .chip').forEach(c=>{
+  c.addEventListener('click',()=>{
+    document.querySelectorAll('#sizes .chip').forEach(x=>x.classList.remove('active'));
+    c.classList.add('active');
+    state.size = c.dataset.size;
+    updateMobileVariant();
+  });
+});
+function updatePrice(){
+  document.getElementById('price').textContent = '$' + state.price;
+  const ap = Math.round(state.price/4);
+  document.querySelector('.pay-later').textContent = `or 4 × $${ap} with Afterpay`;
+}
+function updateMobileVariant(){
+  document.getElementById('mbVariant').textContent = `${state.metal} · ${state.size}`;
+}
+function changeQty(d){
+  state.qty = Math.max(1, state.qty + d);
+  document.getElementById('qty').value = state.qty;
+}
+function toggleAcc(btn){
+  const item = btn.parentElement;
+  item.classList.toggle('open');
+}
+function toggleWish(btn){
+  btn.classList.toggle('on');
+}
+
+/* ---------- Cart ---------- */
+let cart = [];
+function openCart(){
+  document.getElementById('cartDrawer').classList.add('open');
+  document.getElementById('cartShade').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeCart(){
+  document.getElementById('cartDrawer').classList.remove('open');
+  document.getElementById('cartShade').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function addToCart(){
+  const existing = cart.find(i => i.metal===state.metal && i.size===state.size);
+  if(existing){ existing.qty += state.qty; }
+  else{
+    cart.push({
+      name: state.name,
+      metal: state.metal,
+      size: state.size,
+      price: state.price,
+      qty: state.qty,
+      img: GALLERY[0]
+    });
+  }
+  renderCart();
+  updateCount();
+  openCart();
+}
+function updateCount(){
+  const total = cart.reduce((s,i)=>s+i.qty,0);
+  const el = document.getElementById('cartCount');
+  el.textContent = total;
+  el.classList.toggle('show', total>0);
+}
+function renderCart(){
+  const body = document.getElementById('cartBody');
+  const foot = document.getElementById('cartFoot');
+  if(cart.length === 0){
+    body.innerHTML = `<div class="empty"><p>Your bag is empty.</p><button class="btn" onclick="closeCart()">Shop new in</button></div>`;
+    foot.style.display = 'none';
+    return;
+  }
+  foot.style.display = 'block';
+  body.innerHTML = cart.map((item,idx)=>`
+    <div class="cart-item">
+      <img src="${item.img.replace('w=1400','w=400')}" alt="${item.name}">
+      <div class="cart-item-info">
+        <div>
+          <div class="cart-item-name">${item.name}</div>
+          <div class="cart-item-variant">${item.metal} · Size ${item.size}</div>
+          <button class="remove" onclick="removeItem(${idx})">Remove</button>
+        </div>
+        <div class="cart-item-bottom">
+          <div class="cart-item-qty">
+            <button onclick="changeItemQty(${idx},-1)">−</button>
+            <span>${item.qty}</span>
+            <button onclick="changeItemQty(${idx},1)">+</button>
+          </div>
+          <div class="cart-item-price">$${(item.price*item.qty).toLocaleString()}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  const subtotal = cart.reduce((s,i)=>s + i.price*i.qty, 0);
+  document.getElementById('subtotal').textContent = '$' + subtotal.toLocaleString();
+}
+function removeItem(idx){
+  cart.splice(idx,1);
+  renderCart();
+  updateCount();
+}
+function changeItemQty(idx,d){
+  cart[idx].qty = Math.max(1, cart[idx].qty + d);
+  renderCart();
+  updateCount();
+}
+
+/* ---------- Announcement rotation ---------- */
+const announceSpans = document.querySelectorAll('#announce span');
+let announceIdx = 0;
+setInterval(()=>{
+  announceSpans[announceIdx].classList.remove('on');
+  announceIdx = (announceIdx + 1) % announceSpans.length;
+  announceSpans[announceIdx].classList.add('on');
+}, 4000);
+
+/* ---------- Reveal on scroll ---------- */
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){ e.target.classList.add('on'); io.unobserve(e.target); }
+  });
+},{threshold:.12});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+/* ---------- Keyboard escape closes cart ---------- */
+document.addEventListener('keydown',(e)=>{
+  if(e.key === 'Escape') closeCart();
+});
+</script>
+</body>
+</html>

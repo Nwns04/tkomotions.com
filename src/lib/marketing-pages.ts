@@ -53,7 +53,7 @@ export const marketingPages: Record<string, MarketingPageData> = {
       { index: '02', title: 'Current openings', body: 'There are no public openings listed at this time. For a future opportunity, introduce yourself by email.' },
     ],
     cta: 'Introduce yourself',
-    ctaHref: 'mailto:hello@tkomotions.com?subject=Career%20enquiry',
+    ctaHref: 'mailto:temitopekehinde@tkomotions.com?subject=Career%20enquiry',
   },
   partners: {
     eyebrow: 'PARTNERS / BUILDING TOGETHER',
@@ -81,7 +81,7 @@ export const marketingPages: Record<string, MarketingPageData> = {
     intro: 'This page is a working draft and is not a substitute for a reviewed privacy notice.',
     sections: [
       { index: '01', title: 'Project enquiries', body: 'The project form collects the details you choose to provide so TKO Motions can respond to your enquiry.' },
-      { index: '02', title: 'Contact', body: 'For questions about information submitted through this website, email hello@tkomotions.com.' },
+      { index: '02', title: 'Contact', body: 'For questions about information submitted through this website, email temitopekehinde@tkomotions.com.' },
     ],
     notice: 'Draft for review: retention periods, processors, cookie use, data-subject rights and a formal privacy contact must be confirmed before publication as a legal notice.',
   },

@@ -13,7 +13,7 @@ export function AuthProvider({ children }) {
       setCsrfToken(data.csrfToken);
       setState({ loading: false, authenticated: data.authenticated, user: data.user || null });
     } catch {
-      setState({ loading: false, authenticated: false, user: null });
+      setState({ loading: false, authenticated: false, user: null, serviceError: 'Finance is temporarily unavailable. Please try again once the service is restored.' });
     }
   }, []);
 

@@ -205,7 +205,7 @@ export function AIPackagePricing({ solutions, customSystem, addOns, marketingOff
 
       <div className="mt-8 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {solutions.map((solution) => (
-          <article key={solution.number} aria-labelledby={'package-' + solution.number + '-title'} className={'flex min-w-0 flex-col border p-5 ' + (solution.number === '03' ? 'border-kh-green bg-kh-soft' : 'border-kh-rule bg-white')}>
+          <article id={'package-' + solution.number} key={solution.number} aria-labelledby={'package-' + solution.number + '-title'} className={'scroll-mt-24 flex min-w-0 flex-col border p-5 ' + (solution.number === '03' ? 'border-kh-green bg-kh-soft' : 'border-kh-rule bg-white')}>
             <div className="flex min-h-5 items-center justify-between gap-2">
               <span className="font-mono text-[9px] tracking-[0.055em] text-kh-muted">{solution.number} / AI</span>
               {solution.number === '03' && <span className="font-mono text-[8px] tracking-[0.04em] text-kh-green">RECOMMENDED</span>}

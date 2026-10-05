@@ -319,8 +319,8 @@ export default function HomePage() {
               <Link href="/contact" className="inline-flex min-h-12 items-center gap-3 border border-kh-lime bg-kh-lime px-5 font-mono text-[9px] tracking-[0.055em] text-kh-green transition-colors hover:bg-transparent hover:text-kh-lime">
                 START A PROJECT <span aria-hidden="true" className="text-base">↗</span>
               </Link>
-              <a href="mailto:hello@tkomotions.com" className="inline-flex min-h-12 items-center gap-3 border border-white/40 px-5 font-mono text-[9px] tracking-[0.055em] text-white transition-colors hover:border-kh-lime hover:text-kh-lime">
-                HELLO@TKOMOTIONS.COM
+              <a href="mailto:temitopekehinde@tkomotions.com" className="inline-flex min-h-12 items-center gap-3 border border-white/40 px-5 font-mono text-[9px] tracking-[0.055em] text-white transition-colors hover:border-kh-lime hover:text-kh-lime">
+                TEMITOPEKEHINDE@TKOMOTIONS.COM
               </a>
             </div>
           </Reveal>

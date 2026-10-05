@@ -10,6 +10,7 @@ const navItems = [
   { number: '01', label: 'WORK', href: '/work' },
   { number: '02', label: 'CAPABILITIES', href: '/capabilities' },
   { number: '03', label: 'AI SOLUTIONS', href: '/solutions/ai' },
+  { number: '↳', label: 'USE CASES', href: '/use-cases' },
   { number: '04', label: 'ABOUT', href: '/about' },
   { number: '05', label: 'FIELD NOTES', href: '/field-notes' },
   { number: '06', label: 'CONTACT', href: '/contact' },
@@ -28,8 +29,15 @@ export function Header() {
       <div className="kh-container flex h-[74px] items-center justify-between gap-6">
         <Mark />
 
-        <nav className="hidden items-center gap-[18px] md:flex" aria-label="Primary navigation">
-          {navItems.map((item) => (
+        <nav className="hidden items-center gap-[18px] lg:flex" aria-label="Primary navigation">
+          {navItems.filter(item => item.href !== '/use-cases').map((item) => item.href === '/solutions/ai' ? (
+            <details key={item.href} className="relative">
+              <summary className={`inline-flex min-h-10 cursor-pointer list-none items-center gap-[7px] font-mono text-[8px] tracking-[0.055em] ${isActive(item.href) || isActive('/use-cases') ? 'text-kh-green' : 'text-[#666b63]'}`}><span className="text-[#9ba097]">{item.number}</span>{item.label}<span aria-hidden="true">⌄</span></summary>
+              <div className="absolute top-full left-0 z-50 grid min-w-48 border border-kh-rule bg-white p-2 shadow-sm">
+                {[{ label: 'AI Solutions', href: '/solutions/ai' }, { label: 'Use Cases', href: '/use-cases' }].map(link => <Link key={link.href} href={link.href} aria-current={isActive(link.href) ? 'page' : undefined} onClick={event => event.currentTarget.closest('details')?.removeAttribute('open')} className="flex min-h-11 items-center px-3 text-xs text-kh-green hover:bg-kh-soft">{link.label}</Link>)}
+              </div>
+            </details>
+          ) : (
             <Link
               key={item.href}
               href={item.href}
@@ -50,7 +58,7 @@ export function Header() {
 
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger
-            className="flex h-[38px] w-[38px] flex-col items-center justify-center gap-1.5 border border-kh-rule md:hidden"
+            className="flex h-[38px] w-[38px] flex-col items-center justify-center gap-1.5 border border-kh-rule lg:hidden"
             aria-label={open ? 'Close navigation' : 'Open navigation'}
           >
             <span className="h-px w-5 bg-kh-green" />

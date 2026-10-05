@@ -45,9 +45,12 @@ export default function ContactPage() {
                 Share the challenge, the opportunity, or the idea, and we will help you clarify what kind of system, product, or process is worth building.
               </p>
 
-              <div className="mt-8 space-y-4">
-                <Link href="mailto:hello@tkomotions.com" className="inline-flex items-center gap-2 font-mono text-[9px] tracking-[0.055em] text-kh-green">
-                  HELLO@TKOMOTIONS.COM <span aria-hidden="true">↗</span>
+              <div className="mt-8 flex flex-col items-start gap-4">
+                <Link href="mailto:temitopekehinde@tkomotions.com" className="inline-flex items-center gap-2 font-mono text-[9px] tracking-[0.055em] text-kh-green">
+                  temitopekehinde@tkomotions.com <span aria-hidden="true">↗</span>
+                </Link>
+                <Link href="tel:+2347040739828" className="inline-flex min-h-11 items-center gap-2 text-sm text-kh-green">
+                  +234 704 073 9828 <span aria-hidden="true">↗</span>
                 </Link>
               </div>
             </div>

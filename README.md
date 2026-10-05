@@ -115,6 +115,12 @@ The included `render.yaml` configures one Node web service. Next.js serves the p
 
 Puppeteer downloads a compatible Chrome binary during `npm ci`. If the host supplies Chrome separately, set `PUPPETEER_EXECUTABLE_PATH` to that executable. Set `FINANCE_API_ORIGIN` only when the finance API is not listening at `127.0.0.1:4000`.
 
+## Finance login outage diagnosis
+
+The production launcher requires both MONGODB_URI and SESSION_SECRET. It loads local .env settings before launching processes. If either the website or Finance API exits unexpectedly, the launcher stops both with a failure status so Render can recover the service. /api/health checks the Finance API and its database at runtime and returns 503 while unavailable; it no longer reports success for the website alone.
+
+If /api/finance/auth/session returns a plain-text 500, inspect Render logs for the backend startup failure or proxy connection error. Check required secrets, SESSION_SECRET length (32+ characters), the MongoDB Atlas network allowlist and database user permissions, and that the service uses npm start rather than next start. FINANCE_API_ORIGIN must point to the actual internal API listener; remove a stale override when using the default port 4000. Authentication failures normally return JSON with 401; a proxy 500 is not evidence of an incorrect password. Do not reset accounts to resolve a backend outage.
+
 ## Security notes
 
 - Passwords are hashed with bcrypt (cost 12).

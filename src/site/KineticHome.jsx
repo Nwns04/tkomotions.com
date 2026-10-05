@@ -365,7 +365,7 @@ export default function KineticHome() {
 
         <section className="kh-contact kh-section" id="contact" aria-labelledby="kh-contact-title">
           <div className="kh-section-label"><span>06 / CONTACT</span><span>START WITH THE PROBLEM</span></div>
-          <div className="kh-contact-grid"><div><p className="kh-overline">PROJECT INTAKE / 001</p><h2 id="kh-contact-title">WHAT SHOULD<br /><em>MOVE?</em></h2><p className="kh-contact-copy">Tell us what isn’t working, what you’re trying to build, or what opportunity you’re exploring.</p><a className="kh-contact-email" href="mailto:hello@tkomotions.com">hello@tkomotions.com <Arrow diagonal /></a></div>
+          <div className="kh-contact-grid"><div><p className="kh-overline">PROJECT INTAKE / 001</p><h2 id="kh-contact-title">WHAT SHOULD<br /><em>MOVE?</em></h2><p className="kh-contact-copy">Tell us what isn’t working, what you’re trying to build, or what opportunity you’re exploring.</p><a className="kh-contact-email" href="mailto:temitopekehinde@tkomotions.com">temitopekehinde@tkomotions.com <Arrow diagonal /></a></div>
             <ProjectForm className="kh-project-form" />
           </div>
         </section>

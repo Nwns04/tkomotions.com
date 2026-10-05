@@ -49,7 +49,7 @@ const sections = [
   },
   {
     title: 'CONTACT',
-    body: 'For privacy questions, contact hello@tkomotions.com.',
+    body: 'For privacy questions, contact temitopekehinde@tkomotions.com.',
   },
   {
     title: 'POLICY UPDATES',

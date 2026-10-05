@@ -20,12 +20,12 @@ export async function POST(request: Request) {
 
   const resend = getResendClient();
   const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from) return NextResponse.json({ message: 'Project enquiries are temporarily unavailable. Please email hello@tkomotions.com.' }, { status: 503 });
+  if (!resend || !from) return NextResponse.json({ message: 'Project enquiries are temporarily unavailable. Please email temitopekehinde@tkomotions.com.' }, { status: 503 });
 
   const { name, company, email, phone, need, problem, budget, timeline } = parsed.data;
   const result = await resend.emails.send({
     from,
-    to: 'hello@tkomotions.com',
+    to: 'temitopekehinde@tkomotions.com',
     replyTo: email,
     subject: `Project enquiry from ${name}`,
     text: [`Name: ${name}`, `Company: ${company || 'Not provided'}`, `Email: ${email}`, `Phone / WhatsApp: ${phone || 'Not provided'}`, `Project type: ${need}`, `Problem: ${problem}`, `Budget: ${budget || 'Not provided'}`, `Timeline: ${timeline || 'Not provided'}`].join('\n\n'),

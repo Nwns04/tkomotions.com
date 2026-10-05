@@ -87,7 +87,7 @@ export default function CareersPage() {
           <Reveal delay={0.15}>
             <div className="mt-10">
               <a
-                href="mailto:hello@tkomotions.com?subject=Profile%20submission"
+                href="mailto:temitopekehinde@tkomotions.com?subject=Profile%20submission"
                 className="inline-flex min-h-12 items-center gap-3 border border-kh-green bg-kh-green px-5 font-mono text-[9px] tracking-[0.055em] text-white transition-colors hover:bg-transparent hover:text-kh-green"
               >
                 SEND YOUR PROFILE

@@ -41,7 +41,7 @@ const sections = [
   },
   {
     title: 'CONTACT',
-    body: 'For questions about these terms, contact hello@tkomotions.com.',
+    body: 'For questions about these terms, contact temitopekehinde@tkomotions.com.',
   },
 ];
 

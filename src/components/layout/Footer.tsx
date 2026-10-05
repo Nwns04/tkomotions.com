@@ -10,6 +10,8 @@ const primaryNav = [
 ];
 
 const secondaryNav = [
+  { label: 'AI SOLUTIONS', href: '/solutions/ai' },
+  { label: 'USE CASES', href: '/use-cases' },
   { label: 'PRODUCTS', href: '/products' },
   { label: 'PROCESS', href: '/process' },
   { label: 'CAREERS', href: '/careers' },
@@ -34,6 +36,11 @@ export function Footer() {
           <span className="hidden font-mono text-[7px] leading-relaxed text-white/75 md:block">INNOVATE. BUILD. MOVE.</span>
           <span className="hidden font-mono text-[7px] leading-relaxed text-white/75 md:block">BUSINESS INNOVATION<br />&amp; DIGITAL SOLUTIONS</span>
           <Link href="/" className="font-mono text-[8px] tracking-[0.055em] text-kh-lime">BACK TO TOP ↑</Link>
+        </div>
+
+        <div className="flex flex-col gap-2 border-b border-white/25 py-4 text-xs sm:flex-row sm:flex-wrap sm:gap-x-6">
+          <a href="mailto:temitopekehinde@tkomotions.com" className="break-all">temitopekehinde@tkomotions.com</a>
+          <a href="tel:+2347040739828">+234 704 073 9828</a>
         </div>
 
         <nav className="flex flex-wrap gap-x-6 gap-y-3 border-b border-white/25 py-4" aria-label="Footer primary navigation">

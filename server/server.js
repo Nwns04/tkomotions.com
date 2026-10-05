@@ -3,8 +3,8 @@ import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { env } from './config/env.js';
 
 await connectDatabase();
-const server = app.listen(env.PORT, () => {
-  console.log(`TKO Finance API listening on port ${env.PORT}`);
+const server = app.listen(env.FINANCE_PORT, () => {
+  console.log(`TKO Finance API listening on port ${env.FINANCE_PORT}`);
 });
 
 async function shutdown(signal) {

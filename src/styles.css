@@ -1,7 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
-@import "tailwindcss";
-
-:root { font-family: Manrope, system-ui, sans-serif; color: #111827; background: #fafaf7; font-synthesis: none; --green:#14532d; --emerald:#16a34a; --lime:#a3e635; --off:#fafaf7; --soft:#f0fdf4; --border:#d9e7dd; --muted:#64746a; }
+:root { font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif; color: #111827; background: #fafaf7; font-synthesis: none; --green:#14532d; --emerald:#16a34a; --lime:#a3e635; --off:#fafaf7; --soft:#f0fdf4; --border:#d9e7dd; --muted:#64746a; }
 * { box-sizing: border-box; }
 body { margin:0; min-width:320px; min-height:100vh; }
 button, input, select, textarea { font:inherit; }

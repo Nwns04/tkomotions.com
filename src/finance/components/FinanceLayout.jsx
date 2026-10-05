@@ -34,7 +34,7 @@ export default function FinanceLayout() {
     {open && <button className="nav-backdrop" onClick={() => setOpen(false)} aria-label="Close menu" />}
     <section className="finance-main">
       <div className="mobile-bar"><button className="icon-button" onClick={() => setOpen(true)} aria-label="Open menu">☰</button><Logo compact /><span /></div>
-      <main ref={content} className="finance-content"><Outlet /></main>
+      <div ref={content} className="finance-content"><Outlet /></div>
     </section>
   </div>;
 }

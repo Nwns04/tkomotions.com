@@ -1,0 +1,3 @@
+export function FrictionDiagram() {
+  return <div className="site-friction-diagram" aria-label="Manual, disconnected and repetitive work can become an opportunity for a better system"><ul><li>MANUAL</li><li>DISCONNECTED</li><li>SLOW</li><li>REPETITIVE</li></ul><div className="site-friction-core">FIND THE<br />FRICTION</div><ul><li>CLARIFY THE WORK</li><li>DESIGN A RESPONSE</li><li>BUILD AND LEARN</li></ul></div>;
+}

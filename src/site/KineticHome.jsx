@@ -1,6 +1,8 @@
+'use client';
+
 import { useEffect, useRef, useState } from 'react';
+import { ProjectForm } from '../components/contact/ProjectForm';
 import logoUrl from './logo.png';
-import './kinetic-home.css';
 
 const sections = [
   ['01', 'FRICTION', 'friction'],
@@ -43,9 +45,9 @@ const builds = [
 ];
 
 const fieldNotes = [
-  ['024', 'AI / BUSINESS', 'What should a small business actually automate?'],
-  ['025', 'SOFTWARE / SYSTEMS', 'Why business software often starts with the wrong question'],
-  ['026', 'PRODUCT / BUILDING', 'From idea to working system'],
+  ['024', 'AI / BUSINESS', 'What should a small business actually automate?', 'what-should-a-small-business-actually-automate'],
+  ['025', 'SOFTWARE / SYSTEMS', 'Why business software often starts with the wrong question', 'why-business-software-often-starts-with-the-wrong-question'],
+  ['026', 'PRODUCT / BUILDING', 'From idea to working system', 'from-idea-to-working-system'],
 ];
 
 function Arrow({ diagonal = false }) {
@@ -252,22 +254,6 @@ export default function KineticHome() {
     selectSlide((activeSlide + (delta < 0 ? 1 : -1) + heroSlides.length) % heroSlides.length);
   }
 
-  function sendProject(event) {
-    event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget).entries());
-    const body = [
-      `Name: ${values.name}`,
-      `Company: ${values.company || 'Not provided'}`,
-      `Email: ${values.email}`,
-      `Phone / WhatsApp: ${values.phone || 'Not provided'}`,
-      `What are you trying to build?: ${values.need}`,
-      `Problem: ${values.problem}`,
-      `Budget: ${values.budget || 'Not provided'}`,
-      `Timeline: ${values.timeline || 'Not provided'}`,
-    ].join('\n\n');
-    window.location.href = `mailto:hello@tkomotions.com?subject=${encodeURIComponent(`Project enquiry from ${values.name}`)}&body=${encodeURIComponent(body)}`;
-  }
-
   return (
     <div className="kinetic-home" id="top" ref={root}>
       <a className="kh-skip" href="#main-content">Skip to content</a>
@@ -368,8 +354,8 @@ export default function KineticHome() {
 
         <section className="kh-field kh-section" id="field-notes" aria-labelledby="kh-field-title">
           <div className="kh-section-label"><span>05 / FIELD NOTES</span><span>IDEAS IN THE WORKSHOP</span></div>
-          <div className="kh-field-heading"><h2 id="kh-field-title">FIELD<br /><em>NOTES.</em></h2><p>A place for practical thinking on AI, software, business systems, Nigerian technology and building products. Topics below are planned, not published articles.</p></div>
-          <div className="kh-field-list">{fieldNotes.map(([number, category, title]) => <article key={number}><span className="kh-field-number">{number}</span><span className="kh-field-category">{category} / DRAFT</span><h3>{title}</h3><span className="kh-field-state">IN DEVELOPMENT</span></article>)}</div>
+          <div className="kh-field-heading"><h2 id="kh-field-title">FIELD<br /><em>NOTES.</em></h2><p>Practical thinking on AI, software, business systems, Nigerian technology and building products.</p></div>
+          <div className="kh-field-list">{fieldNotes.map(([number, category, title, slug]) => <a href={`/field-notes/${slug}`} key={number}><span className="kh-field-number">{number}</span><span className="kh-field-category">{category}</span><h3>{title}</h3><span className="kh-field-state">READ NOTE ↗</span></a>)}</div>
         </section>
 
         <section className="kh-about kh-section" id="about" aria-labelledby="kh-about-title">
@@ -380,15 +366,7 @@ export default function KineticHome() {
         <section className="kh-contact kh-section" id="contact" aria-labelledby="kh-contact-title">
           <div className="kh-section-label"><span>06 / CONTACT</span><span>START WITH THE PROBLEM</span></div>
           <div className="kh-contact-grid"><div><p className="kh-overline">PROJECT INTAKE / 001</p><h2 id="kh-contact-title">WHAT SHOULD<br /><em>MOVE?</em></h2><p className="kh-contact-copy">Tell us what isn’t working, what you’re trying to build, or what opportunity you’re exploring.</p><a className="kh-contact-email" href="mailto:hello@tkomotions.com">hello@tkomotions.com <Arrow diagonal /></a></div>
-            <form className="kh-project-form" onSubmit={sendProject}>
-              <label><span>01 / NAME</span><input name="name" autoComplete="name" required /></label>
-              <label><span>02 / COMPANY</span><input name="company" autoComplete="organization" /></label>
-              <div className="kh-form-pair"><label><span>03 / EMAIL</span><input name="email" type="email" autoComplete="email" required /></label><label><span>04 / PHONE / WHATSAPP</span><input name="phone" type="tel" autoComplete="tel" /></label></div>
-              <label><span>05 / WHAT ARE YOU TRYING TO BUILD?</span><select name="need" defaultValue=""><option value="" disabled>Choose a starting point</option><option>Software system</option><option>AI or automation</option><option>Digital product</option><option>Website or digital experience</option><option>Integration</option><option>Still defining the problem</option></select></label>
-              <label><span>06 / WHAT PROBLEM ARE YOU SOLVING?</span><textarea name="problem" rows="3" required /></label>
-              <div className="kh-form-pair"><label><span>07 / BUDGET</span><select name="budget" defaultValue=""><option value="">Choose range</option><option>Under ₦500,000</option><option>₦500,000–₦2,000,000</option><option>₦2,000,000–₦5,000,000</option><option>₦5,000,000+</option><option>To be discussed</option></select></label><label><span>08 / TIMELINE</span><select name="timeline" defaultValue=""><option value="">Choose timing</option><option>As soon as possible</option><option>1–3 months</option><option>3–6 months</option><option>Exploring</option></select></label></div>
-              <button type="submit">START A CONVERSATION <Arrow diagonal /></button><small>Your email app opens with the project details ready to send.</small>
-            </form>
+            <ProjectForm className="kh-project-form" />
           </div>
         </section>
       </main>

@@ -5,4 +5,21 @@
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
+  <url><loc>https://tkomotions.com/about</loc><changefreq>yearly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://tkomotions.com/capabilities</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://tkomotions.com/process</loc><changefreq>yearly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://tkomotions.com/products</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://tkomotions.com/careers</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://tkomotions.com/partners</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://tkomotions.com/future-innovators</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://tkomotions.com/faq</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://tkomotions.com/contact</loc><changefreq>yearly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://tkomotions.com/work</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://tkomotions.com/work/lead-system</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://tkomotions.com/work/tko-motions</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://tkomotions.com/work/taxbot-naija</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://tkomotions.com/field-notes</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://tkomotions.com/field-notes/what-should-a-small-business-actually-automate</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://tkomotions.com/field-notes/why-business-software-often-starts-with-the-wrong-question</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://tkomotions.com/field-notes/from-idea-to-working-system</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
 </urlset>

@@ -1,10 +1,16 @@
 # TKO Motions + TKO Finance
 
-The main TKO Motions React application lives at `/`. The private finance workspace lives at `/finance`, with its Express API under `/api/finance`. It covers clients, AI-assisted or manual quotations, invoices, payments, receipts, settings, and server-generated PDFs.
+The TKO Motions marketing site is a Next.js App Router application. Field notes are authored as MDX under `content/field-notes` and compiled by Velite. The private finance workspace remains at `/finance`, with its Express API under `/api/finance`. It covers clients, AI-assisted or manual quotations, invoices, payments, receipts, settings, and server-generated PDFs.
+
+## TKO AI Sales Engine demo
+
+`/solutions/ai-sales` hosts the public **TKO Properties** demonstration. Visitor messages and approved knowledge are stored in MongoDB. The secure contact form creates a deterministic, `DEMO`-scoped lead and creates an inspection request when selected. Staff must use the existing Finance session to access `/lead-dashboard`; the dashboard APIs do not return business data to public visitors.
+
+Set `AI_PROVIDER=groq`, `AI_BASE_URL=https://api.groq.com/openai/v1`, `AI_API_KEY`, and `AI_MODEL=openai/gpt-oss-20b` for the demo assistant. `AI_PROVIDER=openai` supports a compatible OpenAI endpoint without rewriting business workflows.
 
 ## Stack
 
-- React 19, Vite, React Router, Tailwind CSS 4, GSAP, Axios
+- Next.js 15, React 19, React Router, Tailwind CSS 4, GSAP, Velite, Axios
 - Node.js and Express 5
 - MongoDB and Mongoose
 - Server-side sessions in MongoDB using an HTTP-only, secure cookie
@@ -22,10 +28,14 @@ The main TKO Motions React application lives at `/`. The private finance workspa
 
    ```env
    NODE_ENV=development
-   PORT=4000
+   PORT=3000
+   FINANCE_PORT=4000
    MONGODB_URI=mongodb://127.0.0.1:27017/tko_finance
    SESSION_SECRET=use-at-least-32-random-characters-here
    APP_ORIGIN=http://localhost:5173
+   FINANCE_API_ORIGIN=http://127.0.0.1:4000
+   RESEND_API_KEY=
+   RESEND_FROM_EMAIL=
    PUPPETEER_EXECUTABLE_PATH=
    BUSINESS_TIME_ZONE=Africa/Lagos
    ENSURE_DATABASE_INDEXES=true
@@ -43,13 +53,15 @@ The main TKO Motions React application lives at `/`. The private finance workspa
    npm run create-admin -- --email=owner@tkomotions.com --password=replace-with-a-strong-password --name="TKO Owner"
    ```
 
-4. Start the Vite frontend and Express API together:
+4. Start the Next.js site and Express API together:
 
    ```powershell
    npm run dev
    ```
 
-5. Open `http://localhost:5173/finance`.
+5. Open `http://localhost:5173/` for the marketing site or `http://localhost:5173/finance/login` for the finance workspace.
+
+Run `npm run dev:content` in a second terminal when editing MDX field notes; this regenerates the Velite collection as content changes.
 
 There is no public registration route. Run `create-admin` again to rotate the password.
 
@@ -84,7 +96,7 @@ Payment, linked-receipt, and quotation-conversion writes use MongoDB transaction
 
 ## Production deployment on Render
 
-The included `render.yaml` configures one Node web service that serves both the compiled React app and the API.
+The included `render.yaml` configures one Node web service. Next.js serves the public site on Render's assigned `PORT`; Express listens on the internal `FINANCE_PORT`, and Next.js rewrites `/api/*` requests to it.
 
 1. Create a MongoDB Atlas database and allow the Render service to connect.
 2. Connect this repository to Render using the Blueprint or create a Node web service manually.
@@ -92,15 +104,16 @@ The included `render.yaml` configures one Node web service that serves both the 
    - `MONGODB_URI`
    - `SESSION_SECRET` (32+ random characters)
    - `APP_ORIGIN=https://tkomotions.com`
+   - `RESEND_API_KEY` and `RESEND_FROM_EMAIL` for project enquiry delivery
    - `GEMINI_API_KEY`
    - `GROQ_API_KEY`
    - Keep `ENSURE_DATABASE_INDEXES=true` and `BUSINESS_TIME_ZONE=Africa/Lagos` unless the business timezone changes.
-4. Build command: `npm ci && npm run build`
+4. Build command: `npm ci && npm run build` (Velite runs before `next build`)
 5. Start command: `npm start`
 6. Point `tkomotions.com` at the Render service and ensure HTTPS is active.
 7. Open a Render shell once and run the `npm run create-admin -- ...` command above.
 
-Puppeteer downloads a compatible Chrome binary during `npm ci`. If the host supplies Chrome separately, set `PUPPETEER_EXECUTABLE_PATH` to that executable.
+Puppeteer downloads a compatible Chrome binary during `npm ci`. If the host supplies Chrome separately, set `PUPPETEER_EXECUTABLE_PATH` to that executable. Set `FINANCE_API_ORIGIN` only when the finance API is not listening at `127.0.0.1:4000`.
 
 ## Security notes
 

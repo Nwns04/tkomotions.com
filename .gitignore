@@ -1,7 +1,12 @@
 node_modules/
 dist/
+.next/
+.velite/
+out/
+*.tsbuildinfo
 .env
 .env.*
+!.env.local.example
 !.env.example
 *.log
 .DS_Store

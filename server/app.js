@@ -1,5 +1,3 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import express from 'express';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
@@ -20,8 +18,6 @@ import aiRoutes from './routes/ai.routes.js';
 import { errorHandler, notFound } from './middleware/errors.js';
 
 const app = express();
-const directory = path.dirname(fileURLToPath(import.meta.url));
-
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(helmet({
@@ -60,13 +56,7 @@ app.use('/api/finance/settings', settingsRoutes);
 app.use('/api/finance/catalog', catalogRoutes);
 app.use('/api/finance/ai', aiRoutes);
 
-if (isProduction) {
-  const dist = path.resolve(directory, '..', 'dist');
-  app.use(express.static(dist, { maxAge: '1y', immutable: true, index: false }));
-  app.get('/{*splat}', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
-} else {
-  app.use('/api/{*splat}', notFound);
-}
+app.use('/api/{*splat}', notFound);
 
 app.use(errorHandler);
 

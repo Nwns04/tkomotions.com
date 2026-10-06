@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { connectToDatabase } from '@/sales-engine/db/connection';
 import { Appointment, Lead } from '@/sales-engine/db/models';
 import { ensureDemoBusiness } from '@/sales-engine/services/demo-business';
+import { ensureDemoDashboardBusiness } from '@/sales-engine/services/demo-dashboard-seed';
 import { requireStaff, staffRequired } from '@/sales-engine/staff-auth';
 
 const appointmentSchema = z.object({
@@ -16,7 +17,7 @@ const appointmentSchema = z.object({
 export async function GET(request: Request) {
   if (!await requireStaff(request)) return staffRequired();
   await connectToDatabase();
-  const business = await ensureDemoBusiness();
+  const business = await ensureDemoDashboardBusiness();
   const appointments = await Appointment.find({ businessId: business._id }).sort({ createdAt: -1 }).limit(100);
   return NextResponse.json({ appointments: appointments.map((appointment) => appointment.toJSON()) }, { status: 200 });
 }

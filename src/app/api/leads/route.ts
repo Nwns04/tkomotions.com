@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { connectToDatabase } from '@/sales-engine/db/connection';
 import { Lead } from '@/sales-engine/db/models';
 import { captureDemoLead } from '@/sales-engine/services/conversation-workflow';
-import { ensureDemoBusiness } from '@/sales-engine/services/demo-business';
+import { ensureDemoDashboardBusiness } from '@/sales-engine/services/demo-dashboard-seed';
 import { requireStaff, staffRequired } from '@/sales-engine/staff-auth';
 
 const leadSchema = z.object({
@@ -23,7 +23,7 @@ const leadSchema = z.object({
 export async function GET(request: Request) {
   if (!await requireStaff(request)) return staffRequired();
   await connectToDatabase();
-  const business = await ensureDemoBusiness();
+  const business = await ensureDemoDashboardBusiness();
   const leads = await Lead.find({ businessId: business._id }).sort({ createdAt: -1 }).limit(100);
   return NextResponse.json({ leads: leads.map((lead) => lead.toJSON()) }, { status: 200 });
 }

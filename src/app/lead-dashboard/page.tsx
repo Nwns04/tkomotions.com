@@ -57,7 +57,7 @@ export default function LeadDashboardPage() {
   }, []);
 
   const stats = [
-    { label: 'Today\'s enquiries', value: leads.length },
+    { label: 'Total enquiries', value: leads.length },
     { label: 'Qualified leads', value: leads.filter((lead) => lead.classification !== 'COLD').length },
     { label: 'Hot leads', value: leads.filter((lead) => lead.classification === 'HOT').length },
     { label: 'Appointments', value: appointments.length },
@@ -73,6 +73,8 @@ export default function LeadDashboardPage() {
         </div>
         <div className="flex gap-3"><a href="/lead-dashboard/conversations" className="rounded-full border border-kh-rule px-4 py-2 text-sm font-medium text-kh-green">Conversations</a><a href="/solutions/ai-sales" className="rounded-full border border-kh-rule px-4 py-2 text-sm font-medium text-kh-green">Open demo</a></div>
       </div>
+
+      <p className="mb-6 max-w-3xl text-sm leading-relaxed text-kh-muted">Includes six fictional sample leads marked “Demo sample”, with example inspection requests and follow-up tasks. No real bookings or notifications are created for these samples.</p>
 
       <div className="mb-10 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {stats.map((stat) => (
@@ -93,7 +95,7 @@ export default function LeadDashboardPage() {
                 <th className="px-5 py-4 font-mono text-[9px] uppercase tracking-[0.12em]">Name</th>
                 <th className="px-5 py-4 font-mono text-[9px] uppercase tracking-[0.12em]">Interest</th>
                 <th className="px-5 py-4 font-mono text-[9px] uppercase tracking-[0.12em]">Budget</th>
-                <th className="px-5 py-4 font-mono text-[9px] uppercase tracking-[0.12em]">Score</th>
+                <th className="px-5 py-4 font-mono text-[9px] uppercase tracking-[0.12em]">Lead quality</th>
                 <th className="px-5 py-4 font-mono text-[9px] uppercase tracking-[0.12em]">Status</th>
                 <th className="px-5 py-4 font-mono text-[9px] uppercase tracking-[0.12em]">Source</th>
                 <th className="px-5 py-4 font-mono text-[9px] uppercase tracking-[0.12em]">Created</th>
@@ -117,7 +119,7 @@ export default function LeadDashboardPage() {
                   <td className="px-5 py-4 text-sm font-medium text-kh-ink">{lead.name}</td>
                   <td className="px-5 py-4 text-sm text-kh-muted">{lead.interest}</td>
                   <td className="px-5 py-4 text-sm text-kh-muted">{lead.budget || '—'}</td>
-                  <td className="px-5 py-4 text-sm text-kh-ink">{lead.classification}</td>
+                  <td className="px-5 py-4 text-sm text-kh-ink">{lead.classification} · {lead.score}/100</td>
                   <td className="px-5 py-4 text-sm text-kh-ink">{lead.status}</td>
                   <td className="px-5 py-4 text-sm text-kh-muted">{lead.source}</td>
                   <td className="px-5 py-4 text-sm text-kh-muted">{new Date(lead.createdAt).toLocaleDateString()}</td>

@@ -1,5 +1,6 @@
 import { formatDate, formatMoney } from '../utils/format.js';
 import { removeMonetaryClaims } from '../utils/quotationCopy.js';
+import ItemDescription from './ItemDescription.jsx';
 
 function DocumentBrand({ settings }) {
   return <div className="doc-brand">{settings.logoUrl ? <img src={settings.logoUrl} alt="" /> : <span>TKO</span>}<div><strong>{settings.businessName || 'TKO Motions'}</strong><small>{settings.website || 'tkomotions.com'}</small>{settings.email && <small>{settings.email}</small>}{settings.phone && <small>{settings.phone}</small>}</div></div>;
@@ -35,7 +36,7 @@ export function InvoicePreview({ invoice, client, settings = {} }) {
         <div><small>BILL TO</small><strong>{client?.name || 'Select a client'}</strong><span>{client?.company}</span><span>{client?.email}</span><span>{client?.address}</span></div>
         <div><small>ISSUE DATE</small><strong>{formatDate(invoice.issueDate)}</strong><small>DUE DATE</small><strong>{formatDate(invoice.dueDate)}</strong></div>
       </section>
-      <table><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>{items.map((item, index) => <tr key={index}><td>{item.description || 'Line item'}</td><td>{item.quantity || 0}</td><td>{formatMoney(item.unitPriceMinor ?? item.unitPrice ?? 0, invoice.currency)}</td><td>{formatMoney(item.amount ?? Math.round((Number(item.quantity) || 0) * (Number(item.unitPriceMinor ?? item.unitPrice) || 0)), invoice.currency)}</td></tr>)}</tbody></table>
+      <table><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>{items.map((item, index) => <tr key={index}><td><ItemDescription description={item.description} /></td><td>{item.quantity || 0}</td><td>{formatMoney(item.unitPriceMinor ?? item.unitPrice ?? 0, invoice.currency)}</td><td>{formatMoney(item.amount ?? Math.round((Number(item.quantity) || 0) * (Number(item.unitPriceMinor ?? item.unitPrice) || 0)), invoice.currency)}</td></tr>)}</tbody></table>
       <section className="doc-totals">
         <div><span>Subtotal</span><b>{formatMoney(invoice.subtotal, invoice.currency)}</b></div>
         {invoice.discountAmount > 0 && <div><span>Discount</span><b>− {formatMoney(invoice.discountAmount, invoice.currency)}</b></div>}

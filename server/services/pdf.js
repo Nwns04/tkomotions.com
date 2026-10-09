@@ -1,6 +1,7 @@
 import puppeteer from "puppeteer";
 import { env } from "../config/env.js";
 import { removeMonetaryClaims } from "./quotationCopy.js";
+import { parseItemDescription } from "../../src/finance/utils/itemDescription.js";
 
 const escapeHtml = (value = "") =>
   String(value)
@@ -17,6 +18,15 @@ const formatDate = (value) =>
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(value));
+
+function itemDescriptionHtml(description) {
+  const blocks = parseItemDescription(description);
+  return `<div class="item-description">${blocks.map((block) => {
+    if (block.type === 'text') return `<p>${escapeHtml(block.text)}</p>`;
+    const tag = block.type === 'ordered' ? 'ol' : 'ul';
+    return `<${tag}>${block.items.map((item) => `<li${item.number !== undefined ? ` value="${item.number}"` : ''}>${escapeHtml(item.text)}</li>`).join('')}</${tag}>`;
+  }).join('')}</div>`;
+}
 
 const formatMoney = (amount, currency) =>
   new Intl.NumberFormat("en-NG", {
@@ -119,6 +129,14 @@ function shell(title, number, settings, body, status = "") {
     tbody tr:last-child td { border-bottom:0; }
     th.num, td.num { text-align:right; }
     tbody td.num { font-weight:700; color:#14532d; }
+    .item-description { overflow-wrap:anywhere; line-height:1.6; }
+    .item-description p { margin:0 0 8px; white-space:pre-wrap; }
+    .item-description ol, .item-description ul { margin:8px 0; padding-left:24px; }
+    .item-description ol { list-style:decimal; }
+    .item-description ul { list-style:disc; }
+    .item-description li { margin:4px 0; }
+    .item-description > :first-child { margin-top:0; }
+    .item-description > :last-child { margin-bottom:0; }
     tr { break-inside:avoid; page-break-inside:avoid; }
 
     .totals { width:340px; margin:24px 0 32px auto; }
@@ -223,7 +241,7 @@ function invoiceHtml(invoice, settings) {
   const rows = invoice.items
     .map(
       (item) =>
-        `<tr><td>${escapeHtml(item.description)}</td><td class="num">${
+        `<tr><td>${itemDescriptionHtml(item.description)}</td><td class="num">${
           item.quantity
         }</td><td class="num">${formatMoney(
           item.unitPrice,

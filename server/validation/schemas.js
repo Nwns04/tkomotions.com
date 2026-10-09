@@ -21,7 +21,7 @@ export const clientSchema = z.object({
 });
 
 const invoiceItem = z.object({
-  description: requiredText(500, 'Line item description'),
+  description: requiredText(5000, 'Line item description'),
   quantity: z.coerce.number().positive().max(1_000_000),
   unitPrice: z.coerce.number().int().min(0).max(9_000_000_000_00),
 });

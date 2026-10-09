@@ -5,7 +5,7 @@ import { calculateInvoice, effectiveStatus } from '../services/invoiceMath.js';
 
 const itemSchema = new mongoose.Schema(
   {
-    description: { type: String, required: true, trim: true, maxlength: 500 },
+    description: { type: String, required: true, trim: true, maxlength: 5000 },
     quantity: { type: Number, required: true, min: 0.01, max: 1_000_000 },
     unitPrice: { type: Number, required: true, min: 0, max: 9_000_000_000_00 },
     amount: { type: Number, required: true, min: 0 },

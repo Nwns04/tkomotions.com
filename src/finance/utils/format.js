@@ -15,6 +15,9 @@ export const inputDate = (date = new Date()) => {
 export const toMinor = (value) => Math.round((Number(value) || 0) * 100);
 export const fromMinor = (value) => Number(value || 0) / 100;
 
+// Match the server payment limit using stored totals, rather than a derived API field.
+export const outstandingBalance = (invoice) => Math.max(0, (Number(invoice.total) || 0) - (Number(invoice.amountPaid) || 0));
+
 export const calculateDraft = (invoice) => {
   const subtotal = invoice.items.reduce((sum, item) => sum + Math.round((Number(item.quantity) || 0) * toMinor(item.unitPrice)), 0);
   const discountValue = Number(invoice.discountValue) || 0;

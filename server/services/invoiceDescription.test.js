@@ -17,6 +17,107 @@ const description = `Custom website design and development.
 9. AI assistant integration and configuration, subject to the agreed project scope.
 10. Basic search-engine optimisation and website launch preparation.`;
 
+const pricedDescription = `|   |
+| - |
+Service
+|   |
+| - |
+Standard price
+|   |
+| - |
+Website discovery, requirements & planning
+|   |
+| - |
+₦40,000
+|   |
+| - |
+UI/UX design and brand-aligned website layout
+|   |
+| - |
+₦65,000
+|   |
+| - |
+Homepage and core website pages
+|   |
+| - |
+₦75,000
+|   |
+| - |
+Property listings, details & search filters
+|   |
+| - |
+₦80,000
+|   |
+| - |
+Property enquiry and WhatsApp contact integration
+|   |
+| - |
+₦25,000
+|   |
+| - |
+Secure property listing admin dashboard
+|   |
+| - |
+₦70,000
+|   |
+| - |
+Mobile responsiveness and cross-browser testing
+|   |
+| - |
+₦25,000
+|   |
+| - |
+Basic SEO and performance optimization
+|   |
+| - |
+₦20,000
+|   |
+| - |
+Deployment and launch configuration
+|   |
+| - |
+₦15,000
+|   |
+| - |
+Total standard price
+|   |
+| - |
+₦415,000?`;
+
+test('the pasted service-price example creates nine priced rows totaling NGN 415,000', () => {
+  const items = invoiceItemsFromPaste([{ description: '', quantity: 2, unitPrice: '100' }], 0, pricedDescription, 0, 0, 'NGN');
+  assert.equal(items.length, 9);
+  assert.deepEqual(items.map((item) => Number(item.unitPrice)), [40000, 65000, 75000, 80000, 25000, 70000, 25000, 20000, 15000]);
+  assert.equal(items.reduce((sum, item) => sum + item.quantity * Number(item.unitPrice), 0), 415000);
+  assert.equal(items[0].description, 'Website discovery, requirements & planning');
+  assert.equal(items[8].description, 'Deployment and launch configuration');
+  assert.ok(items.every((item) => item.quantity === 1));
+  assert.throws(() => invoiceItemsFromPaste([{ description: '' }], 0, pricedDescription, 0, 0, 'USD'), /Select NGN/);
+});
+
+test('markdown tables, spreadsheet rows and alternating text all fill prices and skip totals', () => {
+  for (const text of [
+    '| Service | Standard price |\n| --- | ---: |\n| Design | ₦40,000 |\n| Launch | ₦15,000 |\n| Total standard price | ₦55,000 |',
+    'Service\tStandard price\nDesign\t40000\nLaunch\t15000\nTotal\t55000',
+    'Service\nStandard price\nDesign\n₦40,000\nLaunch\n₦15,000\nTotal standard price\n₦55,000',
+  ]) {
+    const items = invoiceItemsFromPaste([{ description: '' }], 0, text, 0, 0, 'NGN');
+    assert.deepEqual(items.map(({ description, unitPrice }) => [description, unitPrice]), [['Design', '40000'], ['Launch', '15000']]);
+  }
+  const usd = invoiceItemsFromPaste([{ description: '', quantity: 5, unitPrice: '10' }], 0, '**Design**\t$1,250.50', 0, 0, 'USD');
+  assert.deepEqual(usd, [{ description: 'Design', quantity: 1, unitPrice: '1250.5' }]);
+  assert.throws(() => invoiceItemsFromPaste([{ description: '' }], 0, 'Design\n₦40,00\nLaunch\n₦15,000', 0, 0, 'NGN'), /could not be read/);
+  assert.throws(() => invoiceItemsFromPaste([{ description: '' }], 0, 'Design\n₦40,00', 0, 0, 'NGN'), /could not be read/);
+  assert.throws(() => invoiceItemsFromPaste([{ description: '' }], 0, 'Design\n₦40,000\nLaunch', 0, 0, 'NGN'), /missing its price/);
+});
+
+test('plain descriptions still split when copied list numbering is removed', () => {
+  const unnumbered = description.replace(/^\d+\. /gm, '');
+  const items = invoiceItemsFromPaste([{ description: '', quantity: 1, unitPrice: '' }], 0, unnumbered, 0, 0);
+  assert.equal(items.length, 11);
+  assert.equal(items[10].description, 'Basic search-engine optimisation and website launch preparation.');
+});
+
 test('pasting the full scope creates a title row and ten separate items without copying its price', () => {
   const items = invoiceItemsFromPaste([{ description: '', quantity: 2, unitPrice: '1000' }], 0, description, 0, 0);
   assert.equal(items.length, 11);
@@ -35,7 +136,7 @@ test('list paste preserves surrounding rows, selected text boundaries and wrappe
   assert.equal(items[1].description, 'Start Design\nand development');
   assert.equal(items[2].description, 'Launch end');
   assert.equal(items[3], after);
-  assert.equal(invoiceItemsFromPaste([before], 0, 'Normal\nparagraph', 0, 0), null);
+  assert.equal(invoiceItemsFromPaste([{ ...before, description: '' }], 0, 'Normal\nparagraph', 0, 0).length, 2);
   assert.equal(invoiceItemsFromPaste([before], 0, '1.5 days', 0, 0), null);
   assert.throws(() => invoiceItemsFromPaste(Array(250).fill(before), 0, '1. Design\n2. Launch', 0, 0), /250/);
 });

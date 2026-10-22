@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthContext.jsx';
 import { Logo } from './UI.jsx';
 
 const links = [
+  ['Email Outreach', '/finance/outreach', '@'],
   ['Dashboard', '/finance', '⌂'],
   ['Quotations', '/finance/quotations', '◇'],
   ['Invoices', '/finance/invoices', '▤'],

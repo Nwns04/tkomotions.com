@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
 import { AuthProvider, ProtectedRoute } from '../auth/AuthContext.jsx';
 import FinanceLayout from './components/FinanceLayout.jsx';
+import OutreachPage from './pages/OutreachPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import ClientsPage from './pages/ClientsPage.jsx';
@@ -25,6 +26,7 @@ export default function FinanceApp() {
         <Route path="login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<FinanceLayout />}>
+            <Route path="outreach" element={<OutreachPage />} />
             <Route index element={<DashboardPage />} />
             <Route path="clients" element={<ClientsPage />} />
             <Route path="clients/new" element={<ClientEditorPage />} />

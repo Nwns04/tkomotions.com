@@ -15,6 +15,7 @@ import dashboardRoutes from './routes/dashboard.routes.js';
 import quotationRoutes from './routes/quotations.routes.js';
 import catalogRoutes from './routes/catalog.routes.js';
 import aiRoutes from './routes/ai.routes.js';
+import outreachRoutes, { outreachPublicRouter } from './routes/outreach.routes.js';
 import { errorHandler, notFound } from './middleware/errors.js';
 
 const app = express();
@@ -24,6 +25,8 @@ app.use(helmet({
   contentSecurityPolicy: isProduction ? undefined : false,
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
+// Signed webhooks require the exact raw body before the global JSON parser.
+app.use('/api/finance/outreach', outreachPublicRouter);
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(session({
@@ -55,6 +58,7 @@ app.use('/api/finance/receipts', receiptRoutes);
 app.use('/api/finance/settings', settingsRoutes);
 app.use('/api/finance/catalog', catalogRoutes);
 app.use('/api/finance/ai', aiRoutes);
+app.use('/api/finance/outreach', outreachRoutes);
 
 app.use('/api/{*splat}', notFound);
 

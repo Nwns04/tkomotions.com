@@ -29,7 +29,7 @@ async function releaseFinishedSequence(lead) {
 
 
 export async function outreachLog(lead, type, detail = '') {
-  await OutreachEvent.create({ owner: lead.owner, leadId: lead.publicId, company: lead.company || lead.name || lead.email, type, detail });
+  await OutreachEvent.create({ owner: lead.owner, leadId: lead.publicId, campaignId: lead.campaignId || null, company: lead.company || lead.name || lead.email, type, detail });
 }
 
 export async function suppressOutreach(email, reason) {

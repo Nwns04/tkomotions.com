@@ -7,6 +7,11 @@ const campaignSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 150 },
   status: { type: String, enum: ['draft', 'active', 'paused'], default: 'draft' },
   timezone: { type: String, default: 'Africa/Lagos' },
+  setupStep: { type: Number, min: 1, max: 4, default: 1 },
+  setupComplete: { type: Boolean, default: false },
+  sendDate: { type: String, default: '', maxlength: 32 },
+  spacing: { type: Number, min: 0, max: 1440, default: 5 },
+  scheduleFollowups: { type: Boolean, default: true },
 }, { timestamps: true, toJSON: publicJson });
 campaignSchema.index({ owner: 1, createdAt: -1 });
 
@@ -57,9 +62,10 @@ leadSchema.index({ unsubscribeToken: 1 }, { unique: true });
 
 const eventSchema = new mongoose.Schema({
   owner: { type: mongoose.Schema.Types.ObjectId, required: true, select: false },
-  leadId: String, company: String, type: String, detail: String,
+  leadId: String, campaignId: { type: mongoose.Schema.Types.ObjectId, ref: 'OutreachCampaign', default: null }, company: String, type: String, detail: String,
 }, { timestamps: true, toJSON: publicJson });
 eventSchema.index({ owner: 1, createdAt: -1 });
+eventSchema.index({ owner: 1, campaignId: 1, createdAt: -1 });
 
 const suppressionSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true }, reason: String,

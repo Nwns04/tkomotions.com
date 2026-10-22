@@ -91,6 +91,21 @@ router.post('/campaigns', async (req, res) => {
   const campaign = await OutreachCampaign.create({ ...parsed.data, owner: req.user._id });
   res.status(201).json({ campaign });
 });
+const campaignSettingsInput = z.object({
+  setupStep: z.number().int().min(1).max(4).optional(),
+  setupComplete: z.boolean().optional(),
+  sendDate: z.union([z.literal(''), z.string().datetime({ local: true })]).optional(),
+  spacing: z.number().int().min(0).max(1440).optional(),
+  scheduleFollowups: z.boolean().optional(),
+}).strict();
+router.patch('/campaigns/:id/settings', async (req, res) => {
+  const parsed = campaignSettingsInput.safeParse(req.body);
+  if (!parsed.success) throw fail('Invalid campaign settings.');
+  const campaign = await OutreachCampaign.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user._id }, { $set: parsed.data }, { new: true, runValidators: true });
+  if (!campaign) throw fail('Campaign not found.', 404);
+  res.json({ campaign });
+});
 router.post('/campaigns/:id/status', async (req, res) => {
   if (!['draft', 'active', 'paused'].includes(req.body?.status)) throw fail('Invalid campaign status.');
   const campaign = await OutreachCampaign.findOneAndUpdate({ _id: req.params.id, owner: req.user._id }, { $set: { status: req.body.status } }, { new: true });

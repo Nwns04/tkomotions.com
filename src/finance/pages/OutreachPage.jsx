@@ -5,6 +5,11 @@ import { exampleOutreachCsv, parseOutreachCsv } from '../utils/outreachCsv.js';
 import './outreach.css';
 
 const blank = () => ({ company: '', name: '', email: '', subject: '', message: '', followup: '', followup2: '', delayDays: 4, followup2DelayDays: 10, permissionBasis: '', autoFollowup: false });
+const validCampaignId = value => typeof value === 'string' && /^[0-9a-f]{24}$/i.test(value);
+const getCampaignId = value => {
+  const id = value?._id ?? value?.id ?? value?.campaignId;
+  return validCampaignId(id) ? id : null;
+};
 const date = value => value ? new Date(value).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 function download(content, name, type) {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -101,7 +106,13 @@ export default function OutreachPage() {
     }
   }
   async function commitImport() {
-    if (!importPreview || !campaignId || importing) return;
+    if (!importPreview || importing) return;
+    if (!validCampaignId(campaignId) || !campaign) {
+      setError('No valid campaign was selected. Return to All campaigns and open the campaign before importing.');
+      logImport('Import blocked', 'Missing or invalid campaign ID; no rows were uploaded.', 'error');
+      setShowImportConsole(true);
+      return;
+    }
     setImporting(true); setBusy(true); setError(''); setMessage(''); setImportResult(null);
     let imported = false;
     try {
@@ -161,9 +172,9 @@ export default function OutreachPage() {
     });
   }
   const config = state?.config;
-  const campaign = (state?.campaigns || []).find(item => String(item._id) === campaignId);
+  const campaign = (state?.campaigns || []).find(item => getCampaignId(item) === campaignId);
   const campaignEvents = (state?.events || []).filter(event => String(event.campaignId || (state?.leads || []).find(l => l.publicId === event.leadId)?.campaignId || '') === campaignId);
-  const activeCampaignId = campaign?._id;
+  const activeCampaignId = getCampaignId(campaign);
   const campaignLeads = (state?.leads || []).filter(lead => String(lead.campaignId || '') === campaignId);
   const visible = campaignLeads.filter(lead => `${lead.company} ${lead.name} ${lead.email} ${lead.subject}`.toLowerCase().includes(search.toLowerCase()) && (filter === 'all' || (filter === 'review' ? [lead.initialState, lead.followupState].some(value => ['review', 'sending'].includes(value)) : lead.status === filter)));
   const sent = campaignLeads.filter(lead => Boolean(lead.sentAt));
@@ -171,17 +182,18 @@ export default function OutreachPage() {
   function goDashboard() { setView('dashboard'); setCampaignId(''); setSelected([]); setShowSettings(false); setShowSchedule(false); }
   function adoptCampaignSettings(item) { setSendDate(item?.sendDate || ''); setSpacing(item?.spacing ?? 5); setScheduleFollowups(item?.scheduleFollowups ?? true); }
   async function persistSettings(fields, quiet = false) {
-    if (!campaignId) return;
+    if (!validCampaignId(campaignId)) { setError('A valid campaign must be selected first.'); return; }
     await action(async () => { await api.patch('/outreach/campaigns/' + campaignId + '/settings', fields); if (!quiet) setMessage('Campaign settings saved.'); });
   }
   async function advanceWizard(next) {
-    if (!campaignId) return;
+    if (!validCampaignId(campaignId)) { setError('A valid campaign must be selected first.'); return; }
     await action(async () => {
       await api.patch('/outreach/campaigns/' + campaignId + '/settings', { setupStep: next, sendDate, spacing, scheduleFollowups });
       setStep(next);
     });
   }
   async function finishWizard() {
+    if (!validCampaignId(campaignId)) { setError('A valid campaign must be selected first.'); return; }
     await action(async () => {
       await api.patch('/outreach/campaigns/' + campaignId + '/settings', { setupComplete: true, setupStep: 4, sendDate, spacing, scheduleFollowups });
       setView('workspace'); setTab('contacts'); setMessage('Setup completed. No emails have been sent or scheduled.');
@@ -189,12 +201,27 @@ export default function OutreachPage() {
   }
   async function createCampaign() {
     if (!newName.trim()) { setError('Enter a campaign name first.'); return; }
+    if (validCampaignId(campaignId)) {
+      await action(async () => {
+        await api.patch('/outreach/campaigns/' + campaignId + '/settings', { name: newName.trim(), setupStep: 1 });
+        setStep(1); setMessage('Campaign details saved. Continue with CSV import.');
+      });
+      return;
+    }
     await action(async () => {
       const { data } = await api.post('/outreach/campaigns', { name: newName.trim() });
-      setCampaignId(String(data.campaign._id)); setStep(1); setMessage('Campaign draft created. Import its CSV next.');
+      const id = getCampaignId(data?.campaign) || (validCampaignId(data?.campaignId) ? data.campaignId : null);
+      if (!id) {
+        throw new Error('The server created a campaign but did not return a valid campaign ID. Return to All campaigns and reopen it; do not create another duplicate campaign.');
+      }
+      setCampaignId(id); setStep(1); setMessage('Campaign draft created. Import its CSV next.');
     });
   }
-  function openCampaign(id) { const item = (state?.campaigns || []).find(c => String(c._id) === String(id)); adoptCampaignSettings(item); setStep(item?.setupStep ?? 1); setCampaignId(String(id)); setView(item?.setupComplete ? 'workspace' : 'wizard'); setTab('contacts'); setSelected([]); setSearch(''); setFilter('all'); }
+  function openCampaign(id) {
+    if (!validCampaignId(id)) { setError('This campaign has no valid ID. Reload the dashboard and contact support if the issue continues.'); return; }
+    const item = (state?.campaigns || []).find(c => getCampaignId(c) === id);
+    if (!item) { setError('Campaign not found. Refresh the dashboard.'); return; }
+    adoptCampaignSettings(item); setNewName(item.name || ''); setStep(item?.setupStep ?? 1); setCampaignId(id); setView(item?.setupComplete ? 'workspace' : 'wizard'); setTab('contacts'); setSelected([]); setSearch(''); setFilter('all'); }
   const schedulePanel = <section className="outreach-card">
         <h2>Schedule selected contacts</h2>
         <p>Select reviewed draft contacts below, set their contact basis, then schedule. Only active campaigns can schedule sends.</p>
@@ -231,7 +258,7 @@ export default function OutreachPage() {
   const importPanel = <section className="outreach-card outreach-import">
     <div className="outreach-section-heading"><div><h2>Import campaign contacts</h2><p>Choose a CSV, review the recognized fields and sample records, then confirm import. Nothing is sent during import.</p></div><Button variant="secondary" disabled={busy} onClick={() => download(exampleOutreachCsv(), 'tko-outreach-template.csv', 'text/csv')}>Download CSV template</Button></div>
     <div className="outreach-import-steps" aria-label="CSV import stages"><span className={importStage === 'upload' ? 'current' : ''}>1. Select CSV</span><span className={importStage === 'preview' ? 'current' : ''}>2. Preview fields</span><span className={importStage === 'complete' ? 'current' : ''}>3. Result</span></div>
-    {importStage === 'upload' && <label className="outreach-dropzone"><strong>Choose a CSV to import</strong><span>CSV only · Up to 500 contacts · Maximum 900 KB</span><input type="file" accept=".csv,text/csv" disabled={busy || !campaignId} onChange={importFile} /><small>Download the template above to see supported field names.</small></label>}
+    {importStage === 'upload' && <label className="outreach-dropzone"><strong>Choose a CSV to import</strong><span>CSV only · Up to 500 contacts · Maximum 900 KB</span><input type="file" accept=".csv,text/csv" disabled={busy || !validCampaignId(campaignId) || !campaign} onChange={importFile} /><small>Download the template above to see supported field names.</small></label>}
     {importStage === 'preview' && importPreview && <div className="outreach-import-preview"><h3>Review before importing</h3><p><strong>{importPreview.rows.length} contacts</strong> in {importPreview.name}. Recognized fields:</p><div className="outreach-import-columns">{Object.keys(importPreview.rows[0] || {}).map(field => <span key={field}>{field}</span>)}</div><div className="outreach-import-stats">{importPreview.rows.filter(r => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(r.email || ''))).length} emails look valid · {importPreview.rows.filter(r => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(r.email || ''))).length} need review (server performs final checks)</div><p>Check column mapping against your CSV. Unrecognized columns are ignored; to correct them, rename the headers using the template and select the file again.</p><div className="outreach-row-actions"><Button variant="secondary" disabled={busy} onClick={() => { setImportPreview(null); setImportStage('upload'); }}>Choose different file</Button><Button disabled={busy} onClick={commitImport}>{importing ? 'Importing…' : `Import ${importPreview.rows.length} contacts`}</Button></div></div>}
     {importStage === 'complete' && importResult && <div className="outreach-import-result" role="status"><h3>Import request completed</h3><p><strong>{importResult.added} added</strong> · {importResult.skipped} skipped · 0 emails sent</p><p>{importResult.progressSaved === false ? 'Contacts saved, but setup progress was not saved. Do not upload again.' : 'Review imported contacts below. Imported follow-ups remain disabled.'}</p><Button variant="secondary" onClick={() => { setImportStage('upload'); setImportResult(null); }}>Import another CSV</Button></div>}
     {importIssues.length > 0 && <details open><summary>{importIssues.length} skipped row(s) — view reasons</summary><ul>{importIssues.map((issue, index) => <li key={index}>Row {issue.row}: {issue.reason}</li>)}</ul></details>}
@@ -254,7 +281,7 @@ export default function OutreachPage() {
     {view === 'dashboard' && <>
       <section className="outreach-stats" aria-label="Outreach totals">{[['Campaigns', state.campaigns?.length || 0], ['Contacts', state.stats.total], ['Emails sent', state.stats.sent], ['Replies', state.stats.replied]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</section>
       <section className="outreach-card"><div className="outreach-section-heading"><div><h2>Your Campaigns</h2><p>Open a campaign to see its emails, contacts, sending controls and actions.</p></div></div>
-        <div className="outreach-campaign-list">{(state.campaigns || []).map(item => { const members = state.leads.filter(lead => String(lead.campaignId || '') === String(item._id)); return <button type="button" key={item._id} className="outreach-campaign-item" onClick={() => openCampaign(item._id)}><span><strong>{item.name}</strong><small>{item.setupComplete ? item.status : 'Setup incomplete · Resume'} · {members.length} loaded contacts · {members.filter(l => l.sentAt).length} sent</small></span><span aria-hidden="true">→</span></button>; })}</div>
+        <div className="outreach-campaign-list">{(state.campaigns || []).map(item => { const members = state.leads.filter(lead => String(lead.campaignId || '') === getCampaignId(item)); return <button type="button" key={getCampaignId(item) || item.name} className="outreach-campaign-item" onClick={() => openCampaign(getCampaignId(item))}><span><strong>{item.name}</strong><small>{item.setupComplete ? item.status : 'Setup incomplete · Resume'} · {members.length} loaded contacts · {members.filter(l => l.sentAt).length} sent</small></span><span aria-hidden="true">→</span></button>; })}</div>
         {!state.campaigns?.length && <p>No campaigns yet. Select + New Campaign to get started.</p>}
       </section>
     </>}
@@ -265,7 +292,7 @@ export default function OutreachPage() {
       {step === 2 && <div className="outreach-wizard-body"><h2>3. Review & edit imported data</h2><p>Open each contact to review its email subject, initial message, follow-ups, delays and contact basis.</p>{contactsPanel}</div>}
       {step === 3 && <div className="outreach-wizard-body"><h2>4. General settings</h2><p>Set your intended sending time and spacing. You can change these later from Campaign Settings.</p>{sendingPanel}<div className="outreach-row-actions"><label>Send date and time <input type="datetime-local" value={sendDate} onChange={e => setSendDate(e.target.value)} /></label><label>Minutes between sends <input type="number" min="0" max="1440" value={spacing} onChange={e => setSpacing(Number(e.target.value))} /></label><label><input type="checkbox" checked={scheduleFollowups} onChange={e => setScheduleFollowups(e.target.checked)} /> Enable follow-ups when scheduling</label></div></div>}
       {step === 4 && <div className="outreach-wizard-body"><h2>5. Review & finish</h2><p><strong>{campaign?.name}</strong> · {campaignLeads.length} contacts · {campaignLeads.filter(l => l.initialState === 'pending').length} unsent drafts</p><p>Finishing saves the campaign workspace. It does not automatically send, activate or schedule any email. Activate and schedule only after reviewing the contacts.</p>{!campaignLeads.length && <Notice>There are no imported contacts yet. You may finish as an empty draft or return to import.</Notice>}</div>}
-      <div className="outreach-wizard-footer"><Button variant="secondary" onClick={() => step === 0 ? goDashboard() : advanceWizard(step - 1)}>{step === 0 ? 'Cancel' : 'Back'}</Button>{step === 0 ? <Button disabled={busy || !newName.trim()} onClick={createCampaign}>Create & continue →</Button> : step === 4 ? <Button disabled={busy} onClick={finishWizard}>Finish · Open campaign →</Button> : <Button disabled={busy} onClick={() => advanceWizard(step + 1)}>Continue →</Button>}</div>
+      <div className="outreach-wizard-footer"><Button variant="secondary" onClick={() => step === 0 ? goDashboard() : advanceWizard(step - 1)}>{step === 0 ? 'Cancel' : 'Back'}</Button>{step === 0 ? <Button disabled={busy || !newName.trim()} onClick={createCampaign}>{validCampaignId(campaignId) ? 'Save & continue →' : 'Create & continue →'}</Button> : step === 4 ? <Button disabled={busy} onClick={finishWizard}>Finish · Open campaign →</Button> : <Button disabled={busy} onClick={() => advanceWizard(step + 1)}>Continue →</Button>}</div>
     </section>}
     {view === 'workspace' && campaign && <>
       <div className="outreach-workspace-bar"><span><strong>Status: {campaign.status}</strong> · {campaignLeads.length} contacts · {sent.length} sent · {replied.length} replies</span><div className="outreach-row-actions"><Button variant="secondary" onClick={() => setShowSettings(true)}>General settings</Button><Button variant="secondary" onClick={() => setShowSchedule(true)}>Schedule contacts</Button>{campaign.status !== 'active' ? <Button disabled={busy} onClick={() => changeStatus('active')}>Activate campaign</Button> : <Button variant="secondary" disabled={busy} onClick={() => changeStatus('paused')}>Pause sending</Button>}</div></div>

@@ -1,5 +1,6 @@
 import express, { Router } from 'express';
 import { randomUUID } from 'node:crypto';
+import mongoose from 'mongoose';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
@@ -45,6 +46,12 @@ outreachPublicRouter.all('/unsubscribe/:token', unsubscribeLimit, async (req, re
   return res.type('html').send(unsubscribePage('You have been unsubscribed. No further outreach emails will be sent to this address.'));
 });
 
+const isCampaignId = value => typeof value === 'string' && /^[0-9a-f]{24}$/i.test(value) && mongoose.isValidObjectId(value);
+const campaignResponse = campaign => ({ ...campaign.toJSON(), _id: String(campaign._id), id: String(campaign._id) });
+const requireCampaignParam = (req, res, next) => {
+  if (!isCampaignId(req.params.id)) return res.status(400).json({ message: 'Invalid campaign ID. Reopen the campaign from the dashboard.' });
+  next();
+};
 const router = Router();
 router.use(requireAuth);
 router.use((req, res, next) => {
@@ -63,7 +70,7 @@ router.get('/', async (req, res) => {
     OutreachLead.aggregate([{ $match: { owner: req.user._id } }, { $group: { _id: null, total: { $sum: 1 }, sent: { $sum: { $cond: ['$sentAt', 1, 0] } }, replied: { $sum: { $cond: ['$repliedAt', 1, 0] } }, followups: { $sum: { $cond: ['$followupSentAt', 1, 0] } } } }]),
     OutreachCampaign.find({ owner: req.user._id }).sort({ createdAt: -1 }),
   ]);
-  res.json({ leads, events, campaigns, stats: counts[0] || { total: 0, sent: 0, replied: 0, followups: 0 },
+  res.json({ leads, events, campaigns: campaigns.map(campaignResponse), stats: counts[0] || { total: 0, sent: 0, replied: 0, followups: 0 },
     config: { live: config.live, configured: config.configured, requestedLive: config.requestedLive, from: config.from, replyTo: config.replyTo, receiving: config.receiving, autoFollowupReady: config.autoFollowupReady } });
 });
 
@@ -83,6 +90,10 @@ router.post('/import', async (req, res) => {
     log('info', 'request-received', { rowCount: input.data.rows.length, hasCampaign: !!input.data.campaignId });
     phase = 'campaign-lookup';
     let campaign = null;
+    if (input.data.campaignId && !isCampaignId(input.data.campaignId)) {
+      log('warn', 'invalid-campaign-id', { campaignIdProvided: true });
+      throw fail('Invalid campaign ID. Reopen the campaign from the dashboard and retry.', 400);
+    }
     if (input.data.campaignId) {
       campaign = await OutreachCampaign.findOne({ owner: req.user._id, _id: input.data.campaignId });
       if (!campaign) throw fail('Campaign not found.', 404);
@@ -126,28 +137,29 @@ router.post('/campaigns', async (req, res) => {
   const parsed = campaignInput.safeParse(req.body);
   if (!parsed.success) throw fail('Enter a campaign name (1–150 characters).');
   const campaign = await OutreachCampaign.create({ ...parsed.data, owner: req.user._id });
-  res.status(201).json({ campaign });
+  res.status(201).json({ campaign: campaignResponse(campaign), campaignId: String(campaign._id) });
 });
 const campaignSettingsInput = z.object({
-  setupStep: z.number().int().min(1).max(4).optional(),
+  setupStep: z.number().int().min(0).max(4).optional(),
+  name: z.string().trim().min(1).max(150).optional(),
   setupComplete: z.boolean().optional(),
   sendDate: z.union([z.literal(''), z.string().datetime({ local: true })]).optional(),
   spacing: z.number().int().min(0).max(1440).optional(),
   scheduleFollowups: z.boolean().optional(),
 }).strict();
-router.patch('/campaigns/:id/settings', async (req, res) => {
+router.patch('/campaigns/:id/settings', requireCampaignParam, async (req, res) => {
   const parsed = campaignSettingsInput.safeParse(req.body);
   if (!parsed.success) throw fail('Invalid campaign settings.');
   const campaign = await OutreachCampaign.findOneAndUpdate(
     { _id: req.params.id, owner: req.user._id }, { $set: parsed.data }, { new: true, runValidators: true });
   if (!campaign) throw fail('Campaign not found.', 404);
-  res.json({ campaign });
+  res.json({ campaign: campaignResponse(campaign) });
 });
-router.post('/campaigns/:id/status', async (req, res) => {
+router.post('/campaigns/:id/status', requireCampaignParam, async (req, res) => {
   if (!['draft', 'active', 'paused'].includes(req.body?.status)) throw fail('Invalid campaign status.');
   const campaign = await OutreachCampaign.findOneAndUpdate({ _id: req.params.id, owner: req.user._id }, { $set: { status: req.body.status } }, { new: true });
   if (!campaign) throw fail('Campaign not found.', 404);
-  res.json({ campaign });
+  res.json({ campaign: campaignResponse(campaign) });
 });
 const scheduleInput = z.object({ ids: z.array(z.string()).min(1).max(500), startAt: z.string().datetime({ offset: true }), intervalMinutes: z.number().min(0).max(1440).default(0), autoFollowup: z.boolean().default(false) });
 

@@ -7,7 +7,7 @@ const campaignSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 150 },
   status: { type: String, enum: ['draft', 'active', 'paused'], default: 'draft' },
   timezone: { type: String, default: 'Africa/Lagos' },
-  setupStep: { type: Number, min: 1, max: 4, default: 1 },
+  setupStep: { type: Number, min: 0, max: 4, default: 1 },
   setupComplete: { type: Boolean, default: false },
   sendDate: { type: String, default: '', maxlength: 32 },
   spacing: { type: Number, min: 0, max: 1440, default: 5 },

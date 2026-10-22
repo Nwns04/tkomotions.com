@@ -17,6 +17,12 @@ export default function OutreachPage() {
   const [busy, setBusy] = useState(false), [search, setSearch] = useState(''), [filter, setFilter] = useState('all');
   const [draft, setDraft] = useState(blank), [editing, setEditing] = useState(null), [confirming, setConfirming] = useState(null);
   const [importIssues, setImportIssues] = useState([]);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importStage, setImportStage] = useState('upload');
+  const [importResult, setImportResult] = useState(null);
+  const [importLogs, setImportLogs] = useState([]);
+  const [showImportConsole, setShowImportConsole] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [campaignId, setCampaignId] = useState('');
   const [view, setView] = useState('dashboard'), [step, setStep] = useState(0), [newName, setNewName] = useState('');
   const [tab, setTab] = useState('contacts'), [showSettings, setShowSettings] = useState(false), [showSchedule, setShowSchedule] = useState(false);
@@ -59,16 +65,80 @@ export default function OutreachPage() {
       editor.current.close(); setMessage('Contact saved.');
     });
   }
+  // Diagnostic messages deliberately exclude CSV row content, addresses and request credentials.
+  function logImport(phase, detail, level = 'info') {
+    const record = { at: new Date().toISOString(), phase, detail: String(detail).slice(0, 240), level };
+    setImportLogs(previous => [...previous.slice(-49), record]);
+    if (level === 'error') console.error('[Outreach CSV]', record);
+    else console.info('[Outreach CSV]', record);
+  }
+  function importFailure(reason) {
+    const status = reason?.response?.status;
+    const message = reason?.response ? apiMessage(reason) : reason?.message || 'Unknown error';
+    // API errors can include user-supplied values: redact email addresses in diagnostic output.
+    const detail = String(message).replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email hidden]');
+    return { status, detail };
+  }
   async function importFile(event) {
     const file = event.target.files?.[0]; event.target.value = '';
     if (!file) return;
-    await action(async () => {
+    setError(''); setImportResult(null); setImportIssues([]); setImportPreview(null);
+    setImportStage('upload');
+    logImport('File selected', `CSV size ${file.size} bytes`);
+    try {
+      if (!/\.csv$/i.test(file.name)) throw new Error('Choose a .csv file.');
       if (file.size > 900000) throw new Error('Choose a CSV smaller than 900 KB.');
       const rows = parseOutreachCsv(await file.text());
-      const { data } = await api.post('/outreach/import', { rows, ...(campaignId ? { campaignId } : {}) });
-      setImportIssues(data.skipped); setMessage(`Added ${data.added} contact(s). Skipped ${data.skipped.length}. Imported contacts start with automatic follow-ups off.`);
-      if (view === 'wizard' && data.added > 0) { await api.patch('/outreach/campaigns/' + campaignId + '/settings', { setupStep: 2 }); setStep(2); }
-    });
+      if (!rows.length) throw new Error('The CSV has no contact rows.');
+      setImportPreview({ rows, size: file.size, name: file.name });
+      setImportStage('preview');
+      logImport('CSV parsed', `${rows.length} rows ready to preview. No data uploaded yet.`);
+    } catch (reason) {
+      const { detail } = importFailure(reason);
+      setError(detail); logImport('CSV validation failed', detail, 'error'); setShowImportConsole(true);
+    }
+  }
+  async function commitImport() {
+    if (!importPreview || !campaignId || importing) return;
+    setImporting(true); setBusy(true); setError(''); setMessage(''); setImportResult(null);
+    let imported = false;
+    try {
+      logImport('Import request', `Sending ${importPreview.rows.length} rows to campaign (contact data excluded from logs)`);
+      const { data } = await api.post('/outreach/import', { rows: importPreview.rows, campaignId });
+      imported = true;
+      const skipped = Array.isArray(data.skipped) ? data.skipped : [];
+      setImportIssues(skipped);
+      setImportResult({ added: data.added, skipped: skipped.length, total: importPreview.rows.length, progressSaved: null });
+      setImportPreview(null); // Import can succeed even when the next step fails; don't offer a blind retry.
+      setImportStage('complete');
+      logImport('Contacts saved', `${data.added} added; ${skipped.length} skipped. No emails sent.`);
+      setMessage(`Imported ${data.added} contact(s); ${skipped.length} skipped. No emails sent.`);
+      if (view === 'wizard' && data.added > 0) {
+        try {
+          await api.patch('/outreach/campaigns/' + campaignId + '/settings', { setupStep: 2 });
+          setStep(2);
+          setImportResult(previous => ({ ...previous, progressSaved: true }));
+          logImport('Setup progress', 'Saved step 3 (Review & edit)');
+        } catch (reason) {
+          const { status, detail } = importFailure(reason);
+          setImportResult(previous => ({ ...previous, progressSaved: false }));
+          setError('Contacts were imported successfully, but wizard progress could not be saved. Open Review & edit or reopen the campaign; do not reupload the file.');
+          setStep(2); // Show imported records despite settings failure.
+          logImport('Progress save failed', `HTTP ${status || 'network'}: ${detail}`, 'error');
+          setShowImportConsole(true);
+        }
+      }
+    } catch (reason) {
+      const { status, detail } = importFailure(reason);
+      // When transport fails, the server could have committed a partial import.
+      setError('Import could not be confirmed. Check campaign contacts before attempting another upload. ' + detail);
+      logImport('Import not confirmed', `HTTP ${status || 'network'}: ${detail}`, 'error');
+      setShowImportConsole(true);
+    } finally {
+      setImporting(false); setBusy(false);
+      try { await load(); }
+      catch (reason) { logImport('Refresh failed', `HTTP ${reason?.response?.status || 'network'}; check contacts from the dashboard`, 'error'); }
+    }
   }
   function confirmSend(lead, followup = false) {
     setConfirming({ lead, followup }); confirmation.current.showModal();
@@ -156,10 +226,15 @@ export default function OutreachPage() {
         <p>{config?.live ? 'Review and confirm each email before sending.' : 'Live sending requires server settings and explicit activation.'}</p>
         <p><strong>Reply tracking:</strong> {config?.receiving ? `Receiving configured for ${config.replyTo}.` : 'Manual reply recording required.'} <strong>Automatic follow-ups:</strong> {config?.autoFollowupReady ? 'Available with appropriate per-contact settings.' : 'Not ready until inbound receiving and scheduling are configured.'}</p>
       </section>;
-  const importPanel = <section className="outreach-card"><div className="outreach-section-heading"><div><h2>Import CSV</h2><p>Import contacts and message fields into this campaign. Import never sends messages or enables follow-ups.</p></div><Button variant="secondary" disabled={busy} onClick={() => download(exampleOutreachCsv(), 'tko-outreach-template.csv', 'text/csv')}>Download CSV template</Button></div>
-        <label className="field"><span>Choose CSV · up to 500 rows / 900 KB</span><input type="file" accept=".csv,text/csv" disabled={busy || !campaignId} onChange={importFile} /></label>
-        {importIssues.length > 0 && <details open><summary>{importIssues.length} skipped row(s)</summary><ul>{importIssues.map((issue, index) => <li key={index}>Row {issue.row}: {issue.reason}</li>)}</ul></details>}
-      </section>;
+  const importPanel = <section className="outreach-card outreach-import">
+    <div className="outreach-section-heading"><div><h2>Import campaign contacts</h2><p>Choose a CSV, review the recognized fields and sample records, then confirm import. Nothing is sent during import.</p></div><Button variant="secondary" disabled={busy} onClick={() => download(exampleOutreachCsv(), 'tko-outreach-template.csv', 'text/csv')}>Download CSV template</Button></div>
+    <div className="outreach-import-steps" aria-label="CSV import stages"><span className={importStage === 'upload' ? 'current' : ''}>1. Select CSV</span><span className={importStage === 'preview' ? 'current' : ''}>2. Preview fields</span><span className={importStage === 'complete' ? 'current' : ''}>3. Result</span></div>
+    {importStage === 'upload' && <label className="outreach-dropzone"><strong>Choose a CSV to import</strong><span>CSV only · Up to 500 contacts · Maximum 900 KB</span><input type="file" accept=".csv,text/csv" disabled={busy || !campaignId} onChange={importFile} /><small>Download the template above to see supported field names.</small></label>}
+    {importStage === 'preview' && importPreview && <div className="outreach-import-preview"><h3>Review before importing</h3><p><strong>{importPreview.rows.length} contacts</strong> in {importPreview.name}. Recognized fields:</p><div className="outreach-import-columns">{Object.keys(importPreview.rows[0] || {}).map(field => <span key={field}>{field}</span>)}</div><div className="outreach-import-stats">{importPreview.rows.filter(r => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(r.email || ''))).length} emails look valid · {importPreview.rows.filter(r => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(r.email || ''))).length} need review (server performs final checks)</div><p>Check column mapping against your CSV. Unrecognized columns are ignored; to correct them, rename the headers using the template and select the file again.</p><div className="outreach-row-actions"><Button variant="secondary" disabled={busy} onClick={() => { setImportPreview(null); setImportStage('upload'); }}>Choose different file</Button><Button disabled={busy} onClick={commitImport}>{importing ? 'Importing…' : `Import ${importPreview.rows.length} contacts`}</Button></div></div>}
+    {importStage === 'complete' && importResult && <div className="outreach-import-result" role="status"><h3>Import request completed</h3><p><strong>{importResult.added} added</strong> · {importResult.skipped} skipped · 0 emails sent</p><p>{importResult.progressSaved === false ? 'Contacts saved, but setup progress was not saved. Do not upload again.' : 'Review imported contacts below. Imported follow-ups remain disabled.'}</p><Button variant="secondary" onClick={() => { setImportStage('upload'); setImportResult(null); }}>Import another CSV</Button></div>}
+    {importIssues.length > 0 && <details open><summary>{importIssues.length} skipped row(s) — view reasons</summary><ul>{importIssues.map((issue, index) => <li key={index}>Row {issue.row}: {issue.reason}</li>)}</ul></details>}
+    <details className="outreach-import-console" open={showImportConsole} onToggle={event => setShowImportConsole(event.currentTarget.open)}><summary>Import diagnostics console ({importLogs.length} events)</summary><div className="outreach-console-toolbar"><span>Technical steps and HTTP errors. CSV contents are not logged.</span><Button variant="secondary" onClick={() => { const content = importLogs.map(l => `${l.at} [${l.level}] ${l.phase}: ${l.detail}`).join('\n'); download(content, 'outreach-import-diagnostics.txt', 'text/plain'); }}>Download log</Button><Button variant="secondary" onClick={() => setImportLogs([])}>Clear</Button></div><pre>{importLogs.map(l => `${l.at} [${l.level}] ${l.phase}: ${l.detail}`).join('\n') || 'No events yet. Select a CSV to begin.'}</pre></details>
+  </section>;
   const contactsPanel = <section className="outreach-card"><div className="outreach-section-heading"><div><h2>Contacts & messages</h2><p>Review CSV fields, edit drafts, select recipients and inspect sending history. Sent messages cannot be edited.</p></div><div className="outreach-row-actions"><Button variant="secondary" disabled={busy} onClick={() => openEditor(null)}>+ Add contact</Button><Button variant="secondary" disabled={busy} onClick={() => action(async () => { const { data } = await api.get('/outreach/export'); download(JSON.stringify(data, null, 2), 'tko-outreach-backup.json', 'application/json'); })}>Export backup</Button></div></div>
         <div className="outreach-filters"><input aria-label="Search contacts" placeholder="Search company, contact, email or subject" value={search} onChange={event => setSearch(event.target.value)} /><select aria-label="Filter contacts" value={filter} onChange={event => setFilter(event.target.value)}>{[['all', 'All statuses'], ['draft', 'Drafts'], ['sent', 'Sent'], ['delivered', 'Delivered'], ['replied', 'Replied'], ['opted-out', 'Opted out'], ['review', 'Delivery review']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
         <div className="outreach-table-wrap"><table className="outreach-table"><thead><tr><th>Select</th><th>Contact / Company</th><th>Email / Subject</th><th>Status</th><th>Follow-up</th><th>Actions</th></tr></thead><tbody>{visible.map(lead => {

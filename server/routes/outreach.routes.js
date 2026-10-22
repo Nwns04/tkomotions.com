@@ -1,4 +1,5 @@
 import express, { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
@@ -67,22 +68,58 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/import', async (req, res) => {
-  const input = z.object({ rows: z.array(z.unknown()).min(1).max(500), campaignId: z.string().optional() }).safeParse(req.body);
-  if (!input.success) throw fail('Provide between 1 and 500 CSV rows.');
-  let campaign = null;
-  if (input.data.campaignId) {
-    campaign = await OutreachCampaign.findOne({ owner: req.user._id, _id: input.data.campaignId });
-    if (!campaign) throw fail('Campaign not found.', 404);
+  // All diagnostics go to the *server terminal*, not the browser.
+  // Never log names, email addresses, CSV content, messages or credentials.
+  const ref = randomUUID();
+  const startedAt = Date.now();
+  let phase = 'validation', rowNumber = null, added = 0, skipped = [];
+  const log = (level, event, extra = {}) => console[level]('[outreach-import]', JSON.stringify({
+    at: new Date().toISOString(), ref, event, phase, rowNumber, added,
+    skipped: skipped.length, elapsedMs: Date.now() - startedAt, ...extra,
+  }));
+  try {
+    const input = z.object({ rows: z.array(z.unknown()).min(1).max(500), campaignId: z.string().optional() }).safeParse(req.body);
+    if (!input.success) throw fail('Provide between 1 and 500 CSV rows.');
+    log('info', 'request-received', { rowCount: input.data.rows.length, hasCampaign: !!input.data.campaignId });
+    phase = 'campaign-lookup';
+    let campaign = null;
+    if (input.data.campaignId) {
+      campaign = await OutreachCampaign.findOne({ owner: req.user._id, _id: input.data.campaignId });
+      if (!campaign) throw fail('Campaign not found.', 404);
+    }
+    phase = 'row-import';
+    for (const [index, row] of input.data.rows.entries()) {
+      rowNumber = index + 2;
+      const parsed = outreachFields.safeParse(row);
+      if (!parsed.success) { skipped.push({ row: rowNumber, reason: parsed.error.issues[0].message }); continue; }
+      if (await OutreachSuppression.exists({ email: parsed.data.email })) { skipped.push({ row: rowNumber, reason: 'Address is suppressed.' }); continue; }
+      try {
+        await OutreachLead.create({ ...parsed.data, autoFollowup: false, owner: req.user._id, campaignId: campaign?._id || null });
+        added++;
+      } catch (error) {
+        if (error.code !== 11000) throw error;
+        skipped.push({ row: rowNumber, reason: 'Duplicate email address.' });
+      }
+    }
+    phase = 'complete'; rowNumber = null;
+    log('info', 'import-complete');
+    return res.status(201).json({ added, skipped, ref });
+  } catch (error) {
+    const status = Number.isInteger(error.status) && error.status >= 400 && error.status < 500 ? error.status : 500;
+    // Never serialize an exception or its MongoDB keyValue: these can contain user email addresses.
+    log('error', 'import-failed', {
+      httpStatus: status,
+      errorName: String(error.name || 'Error').slice(0, 80),
+      dbCode: typeof error.code === 'number' ? error.code : undefined,
+      validationFieldPaths: error.errors ? Object.keys(error.errors).slice(0, 12) : undefined,
+      keyPatternFields: error.keyPattern ? Object.keys(error.keyPattern) : undefined,
+    });
+    res.set('X-Outreach-Import-Ref', ref);
+    return res.status(status).json({
+      message: status === 500 ? 'CSV import failed on the server. Check the server terminal using the error reference. Some contacts may have been saved.' : error.message,
+      ref, addedBeforeFailure: added,
+    });
   }
-  let added = 0; const skipped = [];
-  for (const [index, row] of input.data.rows.entries()) {
-    const parsed = outreachFields.safeParse(row);
-    if (!parsed.success) { skipped.push({ row: index + 2, reason: parsed.error.issues[0].message }); continue; }
-    if (await OutreachSuppression.exists({ email: parsed.data.email })) { skipped.push({ row: index + 2, reason: 'Address is suppressed.' }); continue; }
-    try { await OutreachLead.create({ ...parsed.data, autoFollowup: false, owner: req.user._id, campaignId: campaign?._id || null }); added++; }
-    catch (error) { if (error.code !== 11000) throw error; skipped.push({ row: index + 2, reason: 'Duplicate email address.' }); }
-  }
-  return res.status(201).json({ added, skipped });
 });
 const campaignInput = z.object({ name: z.string().trim().min(1).max(150) });
 router.post('/campaigns', async (req, res) => {

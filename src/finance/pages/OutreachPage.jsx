@@ -77,7 +77,9 @@ export default function OutreachPage() {
     const message = reason?.response ? apiMessage(reason) : reason?.message || 'Unknown error';
     // API errors can include user-supplied values: redact email addresses in diagnostic output.
     const detail = String(message).replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email hidden]');
-    return { status, detail };
+    const ref = reason?.response?.data?.ref || reason?.response?.headers?.['x-outreach-import-ref'];
+    const addedBeforeFailure = reason?.response?.data?.addedBeforeFailure;
+    return { status, detail, ref, addedBeforeFailure };
   }
   async function importFile(event) {
     const file = event.target.files?.[0]; event.target.value = '';
@@ -129,10 +131,10 @@ export default function OutreachPage() {
         }
       }
     } catch (reason) {
-      const { status, detail } = importFailure(reason);
+      const { status, detail, ref, addedBeforeFailure } = importFailure(reason);
       // When transport fails, the server could have committed a partial import.
       setError('Import could not be confirmed. Check campaign contacts before attempting another upload. ' + detail);
-      logImport('Import not confirmed', `HTTP ${status || 'network'}: ${detail}`, 'error');
+      logImport('Import not confirmed', `HTTP ${status || 'network'}: ${detail}${ref ? ` | Server reference: ${ref}` : ''}${Number.isInteger(addedBeforeFailure) ? ` | Saved before error: ${addedBeforeFailure}` : ''}`, 'error');
       setShowImportConsole(true);
     } finally {
       setImporting(false); setBusy(false);

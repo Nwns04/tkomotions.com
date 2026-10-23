@@ -32,7 +32,9 @@ test('webhooks require an exact raw body, signed finite timestamp and valid vers
 test('send rules block duplicate, replied, opted-out, failed and uncertain messages', () => {
   const lead = { email: 'hello@example.test', subject: 'Hello', message: 'First', followup: 'Follow up', permissionBasis: 'Requested information', initialState: 'pending', followupState: 'pending' };
   assert.doesNotThrow(() => assertSendable(lead));
-  for (const change of [{ stoppedReason: 'failed' }, { stoppedReason: 'complained' }, { repliedAt: new Date() }, { optedOutAt: new Date() }, { initialState: 'sending' }, { initialState: 'review' }, { sentAt: new Date() }, { permissionBasis: '' }]) assert.throws(() => assertSendable({ ...lead, ...change }));
+  assert.doesNotThrow(() => assertSendable({ ...lead, permissionBasis: '' }));
+  assert.doesNotThrow(() => assertSendable({ ...lead, permissionBasis: undefined, sentAt: new Date() }, true));
+  for (const change of [{ stoppedReason: 'failed' }, { stoppedReason: 'complained' }, { repliedAt: new Date() }, { optedOutAt: new Date() }, { initialState: 'sending' }, { initialState: 'review' }, { sentAt: new Date() }]) assert.throws(() => assertSendable({ ...lead, ...change }));
   assert.throws(() => assertSendable(lead, true));
   assert.doesNotThrow(() => assertSendable({ ...lead, sentAt: new Date() }, true));
   assert.throws(() => assertSendable({ ...lead, sentAt: new Date(), followupSentAt: new Date() }, true));
@@ -50,6 +52,8 @@ test('CSV supports multiline fields, quoted commas, escaped quotes and BOM', () 
 
 test('field validation limits input, normalizes addresses and rejects unsafe types', () => {
   assert.equal(outreachFields.parse({ email: ' USER@EXAMPLE.TEST ' }).email, 'user@example.test');
+  assert.equal(outreachFields.parse({ email: 'a@example.test' }).permissionBasis, '');
+  assert.equal(parseOutreachCsv('email,permissionBasis\na@example.test,Requested introduction')[0].permissionBasis, 'Requested introduction');
   assert.equal(outreachFields.safeParse({ email: 'invalid' }).success, false);
   assert.equal(outreachFields.safeParse({ email: 'a@example.test', delayDays: 0 }).success, false);
   assert.equal(outreachFields.safeParse({ email: 'a@example.test', subject: 'a'.repeat(251) }).success, false);

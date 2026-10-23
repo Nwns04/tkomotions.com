@@ -48,6 +48,5 @@ export function verifyOutreachWebhook(raw, headers, secret, now = Date.now()) {
 export function assertSendable(lead, followup = false) {
   if (lead.stoppedReason || lead.repliedAt || lead.optedOutAt) throw fail('Sending is stopped for this contact.', 409);
   if (!emailSchema.safeParse(lead.email).success || !lead.subject || !(followup ? lead.followup : lead.message)) throw fail('Recipient, subject, and message are required.');
-  if (!lead.permissionBasis) throw fail('Record your permission or reason for contacting this recipient first.');
   if (followup ? !lead.sentAt || lead.followupSentAt || lead.followupState !== 'pending' : lead.sentAt || lead.initialState !== 'pending') throw fail('This email has already been sent or needs delivery review.', 409);
 }

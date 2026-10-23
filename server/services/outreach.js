@@ -60,7 +60,7 @@ export async function sendOutreach(owner, publicId, { followup = false, step = n
     throw fail('This email is scheduled. Unschedule it before sending manually.', 409);
   if (stageNumber === 2) {
     if (lead.stoppedReason || lead.repliedAt || lead.optedOutAt || !lead.followup2 || !lead.followupSentAt || lead.followup2State !== 'pending' || lead.followup2SentAt) throw fail('Second follow-up is not eligible.', 409);
-    if (!lead.permissionBasis || !lead.subject) throw fail('Subject and contact basis are required.');
+    if (!lead.subject) throw fail('Subject is required.');
   } else assertSendable(lead, stageNumber === 1);
   if (automatic && lead.campaignId) {
     const campaign = await OutreachCampaign.findOne({ _id: lead.campaignId, owner });

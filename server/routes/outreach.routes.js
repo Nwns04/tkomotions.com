@@ -164,8 +164,8 @@ router.post('/campaigns/:id/status', requireCampaignParam, async (req, res) => {
 const scheduleInput = z.object({ ids: z.array(z.string()).min(1).max(500), startAt: z.string().datetime({ offset: true }), intervalMinutes: z.number().min(0).max(1440).default(0), autoFollowup: z.boolean().default(false) });
 
 router.post('/review-contact-basis', async (req, res) => {
-  const input = z.object({ ids: z.array(z.string()).min(1).max(500), permissionBasis: z.string().trim().min(12).max(500) }).safeParse(req.body);
-  if (!input.success) throw fail('Select contacts and give a truthful contact basis of at least 12 characters.');
+  const input = z.object({ ids: z.array(z.string()).min(1).max(500), permissionBasis: z.string().trim().max(500) }).safeParse(req.body);
+  if (!input.success) throw fail('Select contacts and keep the optional contact note within 500 characters.');
   const { ids, permissionBasis } = input.data;
   const count = await OutreachLead.updateMany({ owner: req.user._id, publicId: { $in: ids }, initialState: 'pending', sentAt: null, stoppedReason: '' }, { $set: { permissionBasis } });
   return res.json({ reviewed: count.modifiedCount });
@@ -181,7 +181,7 @@ router.post('/schedule', async (req, res) => {
   if (leads.length !== new Set(ids).size) throw fail('One or more contacts were not found.');
   if (new Set(leads.map(lead => lead.email)).size !== leads.length) throw fail('Selected contacts include the same email address across campaigns. Schedule only one active sequence per address.', 409);
   for (const lead of leads) {
-    if (lead.initialState !== 'pending' || lead.sentAt || lead.stoppedReason || !lead.subject || !lead.message || !lead.permissionBasis) throw fail(`Contact ${lead.email} is not eligible for scheduling.`);
+    if (lead.initialState !== 'pending' || lead.sentAt || lead.stoppedReason || !lead.subject || !lead.message) throw fail(`Contact ${lead.email} is not eligible for scheduling.`);
     if (await OutreachSuppression.exists({ email: lead.email })) throw fail(`Contact ${lead.email} is suppressed.`);
     if (await OutreachLead.exists({ owner: req.user._id, email: lead.email, _id: { $ne: lead._id },
       stoppedReason: '', $or: [
@@ -200,7 +200,7 @@ router.post('/schedule', async (req, res) => {
   // If any address is unavailable, release new reservations and leave the batch untouched.
   const newlyReserved = [];
   try {
-    for (const [index, lead] of leads.entries()) {
+    for (const lead of leads) {
       const existing = await OutreachLease.findOne({ key: `${lead.owner}:${lead.email.toLowerCase()}` });
       const previouslyOurs = existing && String(existing.leadId) === String(lead._id);
       await reserveOutreachLead(lead);

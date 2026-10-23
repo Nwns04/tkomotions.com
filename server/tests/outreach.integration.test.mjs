@@ -9,7 +9,7 @@ import bcrypt from 'bcryptjs';
 assert.equal(process.env.MONGODB_URI, process.env.TKO_BASELINE_OWNED_DB);
 assert.match(process.env.MONGODB_URI || '', /^mongodb:\/\/127\.0\.0\.1:\d+\/tko_baseline\?replicaSet=tkoBaseline$/);
 const { User } = await import('../models/User.js');
-const { OutreachLead, OutreachSuppression, OutreachRate, OutreachLease } = await import('../models/Outreach.js');
+const { OutreachLead, OutreachCampaign, OutreachSuppression, OutreachRate, OutreachLease } = await import('../models/Outreach.js');
 const { default: routes, outreachPublicRouter } = await import('../routes/outreach.routes.js');
 const { sendOutreach, handleOutreachEvent, processOutreachFollowups } = await import('../services/outreach.js');
 const config = { live: true, from: 'TKO <sender@example.test>', replyTo: 'replies@example.test', origin: 'https://example.test', receiving: true, autoFollowupReady: true };
@@ -58,7 +58,8 @@ test('Finance outreach authorization, sending, suppression and webhooks', { time
   });
   let lead;
   await t.test('import validates and deduplicates; exports and reads isolate owners', async () => {
-    const data = await request('/import', { method: 'POST', body: { rows: [fields('lead@example.test'), fields('LEAD@example.test'), { email: { $ne: null } }] }, status: 201 });
+    const { campaign } = await request('/campaigns', { method: 'POST', body: { name: 'Import deduplication fixture' }, status: 201 });
+    const data = await request('/import', { method: 'POST', body: { campaignId: campaign._id, rows: [fields('lead@example.test'), fields('LEAD@example.test'), { email: { $ne: null } }] }, status: 201 });
     assert.equal(data.added, 1); assert.equal(data.skipped.length, 2);
     const state = await request(''); lead = state.leads[0];
     assert.equal(state.stats.total, 1); assert.equal(lead.owner, undefined); assert.equal(lead.unsubscribeToken, undefined);
@@ -87,6 +88,31 @@ test('Finance outreach authorization, sending, suppression and webhooks', { time
     const fresh = await OutreachLead.findById(acceptedLead._id); assert.equal(fresh.initialState, 'accepted'); assert.equal(fresh.status, 'sent'); assert.ok(fresh.followupDueAt > fresh.sentAt);
     await assert.rejects(sendOutreach(staff._id, acceptedLead.publicId, { config, transport }), /already/); assert.equal(calls, 1);
     await request('/' + acceptedLead.publicId, { method: 'PATCH', body: fields('changed@example.test'), status: 409 });
+  });
+  await t.test('optional notes allow draft import, confirmed scheduling, and initial/follow-up sends', async () => {
+    const { campaign } = await request('/campaigns', { method: 'POST', body: { name: 'Optional note campaign' }, status: 201 });
+    const id = campaign._id;
+    await request('/import', { method: 'POST', body: { campaignId: id, rows: [{ email: 'optional-note@example.test', subject: 'Hello', message: 'A requested introduction.', followup: 'Checking in.', followup2: 'Final check-in.' }] }, status: 201 });
+    let contact = await OutreachLead.findOne({ campaignId: id });
+    assert.equal(contact.permissionBasis, ''); assert.equal(contact.scheduledAt, null);
+    const startAt = new Date(Date.now() + 3600000).toISOString();
+    await request('/campaigns/' + id + '/settings', { method: 'PATCH', body: { sendDate: startAt.slice(0, 16), setupComplete: true } });
+    assert.equal((await OutreachLead.findById(contact._id)).scheduledAt, null, 'Saving defaults must not queue email');
+    await request('/campaigns/' + id + '/status', { method: 'POST', body: { status: 'active' } });
+    await request('/schedule', { method: 'POST', body: { ids: [contact.publicId], startAt, intervalMinutes: 5, autoFollowup: false } });
+    contact = await OutreachLead.findById(contact._id); assert.equal(contact.status, 'scheduled'); assert.equal(contact.scheduledAt.toISOString(), startAt);
+    await request('/' + contact.publicId + '/unschedule', { method: 'POST' });
+    await OutreachRate.deleteMany({});
+    let calls = 0;
+    const transport = async () => ({ ok: true, json: async () => ({ id: 'optional-note-' + (++calls) }) });
+    await sendOutreach(staff._id, contact.publicId, { config, transport });
+    await OutreachRate.deleteMany({});
+    await sendOutreach(staff._id, contact.publicId, { config, followup: true, transport });
+    await OutreachRate.deleteMany({});
+    await sendOutreach(staff._id, contact.publicId, { config, step: 2, transport });
+    assert.equal(calls, 3);
+    contact = await OutreachLead.findById(contact._id); assert.ok(contact.sentAt); assert.ok(contact.followupSentAt); assert.ok(contact.followup2SentAt); assert.equal(contact.permissionBasis, '');
+    assert.equal((await OutreachCampaign.findById(id)).status, 'active');
   });
   await t.test('scheduled messages cannot be sent early and cross-campaign leases are atomic', async () => {
     const a = await OutreachLead.create({ ...fields('collision@example.test'), owner: staff._id, scheduledAt: new Date(Date.now() + 3600000) });

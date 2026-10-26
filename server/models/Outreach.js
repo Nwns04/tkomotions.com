@@ -19,6 +19,8 @@ const leadSchema = new mongoose.Schema({
   publicId: { type: String, default: randomUUID, unique: true, immutable: true },
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, select: false },
   campaignId: { type: mongoose.Schema.Types.ObjectId, ref: 'OutreachCampaign', default: null },
+  importBatchId: { type: String, default: null },
+  importName: { type: String, maxlength: 160, default: '' },
   scheduledAt: { type: Date, default: null },
   followup2: { type: String, trim: true, maxlength: 12000, default: '' },
   followup2DelayDays: { type: Number, min: 2, max: 60, default: 10 },

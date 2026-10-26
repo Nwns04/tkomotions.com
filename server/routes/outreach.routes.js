@@ -9,6 +9,9 @@ import { OutreachLead, OutreachCampaign, OutreachEvent, OutreachSuppression, Out
 import { fail, outreachConfig, outreachFields, verifyOutreachWebhook } from '../services/outreachPolicy.js';
 import { sendOutreach, handleOutreachEvent, suppressOutreach, outreachLog, reserveOutreachLead, releaseOutreachLead } from '../services/outreach.js';
 
+import { runSchedulingTasks } from '../services/outreachScheduling.js';
+import { outreachEligibility } from '../services/outreachEligibility.js';
+
 export const outreachPublicRouter = Router();
 outreachPublicRouter.post('/webhook', express.raw({ type: 'application/json', limit: '256kb' }), async (req, res) => {
   if (!verifyOutreachWebhook(req.body, req.headers, outreachConfig().secret)) return res.status(401).json({ message: 'Invalid webhook signature.' });
@@ -70,14 +73,41 @@ router.get('/', async (req, res) => {
     OutreachLead.aggregate([{ $match: { owner: req.user._id } }, { $group: { _id: null, total: { $sum: 1 }, sent: { $sum: { $cond: ['$sentAt', 1, 0] } }, replied: { $sum: { $cond: ['$repliedAt', 1, 0] } }, followups: { $sum: { $cond: ['$followupSentAt', 1, 0] } } } }]),
     OutreachCampaign.find({ owner: req.user._id }).sort({ createdAt: -1 }),
   ]);
-  res.json({ leads, events, campaigns: campaigns.map(campaignResponse), stats: counts[0] || { total: 0, sent: 0, replied: 0, followups: 0 },
+  const eligibility = await outreachEligibility(req.user._id, leads);
+  res.json({ leads: leads.map(lead => ({ ...lead.toJSON(), scheduling: eligibility.get(lead.publicId) })), events, campaigns: campaigns.map(campaignResponse), stats: counts[0] || { total: 0, sent: 0, replied: 0, followups: 0 },
     config: { live: config.live, configured: config.configured, requestedLive: config.requestedLive, from: config.from, replyTo: config.replyTo, receiving: config.receiving, autoFollowupReady: config.autoFollowupReady } });
+});
+
+router.post('/import-preview', async (req, res) => {
+  const input = z.object({ campaignId: z.string().refine(isCampaignId), rows: z.array(z.unknown()).min(1).max(500) }).safeParse(req.body);
+  if (!input.success) throw fail('Select a campaign and up to 500 CSV rows.');
+  const campaign = await OutreachCampaign.exists({ _id: input.data.campaignId, owner: req.user._id });
+  if (!campaign) throw fail('Campaign not found.', 404);
+  const candidates = input.data.rows.map((row, index) => {
+    const parsed = outreachFields.safeParse(row);
+    return parsed.success ? { ...parsed.data, _id: new mongoose.Types.ObjectId(), publicId: String(index), initialState: 'pending' } : null;
+  });
+  const valid = candidates.filter(Boolean);
+  const [eligibility, existing] = await Promise.all([
+    outreachEligibility(req.user._id, valid),
+    OutreachLead.find({ owner: req.user._id, campaignId: input.data.campaignId, email: { $in: valid.map(row => row.email) } }).select('email'),
+  ]);
+  const seen = new Set(existing.map(row => row.email));
+  const rows = candidates.map((row, index) => {
+    if (!row) return { row: index + 2, eligible: false, reason: 'Invalid contact fields; will be skipped' };
+    const duplicate = seen.has(row.email); seen.add(row.email);
+    return { row: index + 2, eligible: !duplicate && eligibility.get(row.publicId).eligible,
+      reason: duplicate ? 'Duplicate in this campaign or CSV; will be skipped' : eligibility.get(row.publicId).reason || 'New eligible contact' };
+  });
+  res.json({ rows });
 });
 
 router.post('/import', async (req, res) => {
   // All diagnostics go to the *server terminal*, not the browser.
   // Never log names, email addresses, CSV content, messages or credentials.
   const ref = randomUUID();
+  const batchId = randomUUID();
+  const addedIds = [];
   const startedAt = Date.now();
   let phase = 'validation', rowNumber = null, added = 0, skipped = [];
   const log = (level, event, extra = {}) => console[level]('[outreach-import]', JSON.stringify({
@@ -85,7 +115,7 @@ router.post('/import', async (req, res) => {
     skipped: skipped.length, elapsedMs: Date.now() - startedAt, ...extra,
   }));
   try {
-    const input = z.object({ rows: z.array(z.unknown()).min(1).max(500), campaignId: z.string().optional() }).safeParse(req.body);
+    const input = z.object({ rows: z.array(z.unknown()).min(1).max(500), campaignId: z.string().optional(), sourceName: z.string().trim().max(160).optional() }).safeParse(req.body);
     if (!input.success) throw fail('Provide between 1 and 500 CSV rows.');
     log('info', 'request-received', { rowCount: input.data.rows.length, hasCampaign: !!input.data.campaignId });
     phase = 'campaign-lookup';
@@ -105,7 +135,8 @@ router.post('/import', async (req, res) => {
       if (!parsed.success) { skipped.push({ row: rowNumber, reason: parsed.error.issues[0].message }); continue; }
       if (await OutreachSuppression.exists({ email: parsed.data.email })) { skipped.push({ row: rowNumber, reason: 'Address is suppressed.' }); continue; }
       try {
-        await OutreachLead.create({ ...parsed.data, autoFollowup: false, owner: req.user._id, campaignId: campaign?._id || null });
+        const lead = await OutreachLead.create({ ...parsed.data, autoFollowup: false, owner: req.user._id, campaignId: campaign?._id || null, importBatchId: batchId, importName: input.data.sourceName || 'Added contacts' });
+        addedIds.push(lead.publicId);
         added++;
       } catch (error) {
         if (error.code !== 11000) throw error;
@@ -114,7 +145,7 @@ router.post('/import', async (req, res) => {
     }
     phase = 'complete'; rowNumber = null;
     log('info', 'import-complete');
-    return res.status(201).json({ added, skipped, ref });
+    return res.status(201).json({ added, skipped, ref, batchId, addedIds });
   } catch (error) {
     const status = Number.isInteger(error.status) && error.status >= 400 && error.status < 500 ? error.status : 500;
     // Never serialize an exception or its MongoDB keyValue: these can contain user email addresses.
@@ -161,7 +192,7 @@ router.post('/campaigns/:id/status', requireCampaignParam, async (req, res) => {
   if (!campaign) throw fail('Campaign not found.', 404);
   res.json({ campaign: campaignResponse(campaign) });
 });
-const scheduleInput = z.object({ ids: z.array(z.string()).min(1).max(500), startAt: z.string().datetime({ offset: true }), intervalMinutes: z.number().min(0).max(1440).default(0), autoFollowup: z.boolean().default(false) });
+const scheduleInput = z.object({ ids: z.array(z.string()).min(1).max(500), startAt: z.string().datetime({ offset: true }), intervalMinutes: z.number().min(0).max(1440).default(0), autoFollowup: z.boolean().default(false), confirmCampaignId: z.string().refine(isCampaignId).optional(), sendDate: z.string().datetime({ local: true }).optional() });
 
 router.post('/review-contact-basis', async (req, res) => {
   const input = z.object({ ids: z.array(z.string()).min(1).max(500), permissionBasis: z.string().trim().max(500) }).safeParse(req.body);
@@ -174,65 +205,89 @@ router.post('/review-contact-basis', async (req, res) => {
 router.post('/schedule', async (req, res) => {
   const parsed = scheduleInput.safeParse(req.body);
   if (!parsed.success) throw fail('Provide contact IDs, ISO date with timezone, and spacing in minutes.');
-  const { ids, startAt, intervalMinutes, autoFollowup } = parsed.data;
-  const start = new Date(startAt);
-  if (start.getTime() <= Date.now() + 120000 || start.getTime() > Date.now() + 365 * 86400000) throw fail('Schedule between two minutes and one year in the future.');
-  const leads = await OutreachLead.find({ owner: req.user._id, publicId: { $in: ids } }).select('+owner').sort({ createdAt: 1 });
-  if (leads.length !== new Set(ids).size) throw fail('One or more contacts were not found.');
-  if (new Set(leads.map(lead => lead.email)).size !== leads.length) throw fail('Selected contacts include the same email address across campaigns. Schedule only one active sequence per address.', 409);
-  for (const lead of leads) {
-    if (lead.initialState !== 'pending' || lead.sentAt || lead.stoppedReason || !lead.subject || !lead.message) throw fail(`Contact ${lead.email} is not eligible for scheduling.`);
-    if (await OutreachSuppression.exists({ email: lead.email })) throw fail(`Contact ${lead.email} is suppressed.`);
-    if (await OutreachLead.exists({ owner: req.user._id, email: lead.email, _id: { $ne: lead._id },
-      stoppedReason: '', $or: [
-        { scheduledAt: { $ne: null } },
-        { sentAt: { $gte: new Date(Date.now() - 14 * 86400000) } },
-        { initialState: 'sending' }, { followupState: 'sending' }, { followup2State: 'sending' },
-      ] })) throw fail(`Another campaign already has an active or recently sent sequence for ${lead.email}.`, 409);
-    if (lead.campaignId) {
-      const campaign = await OutreachCampaign.findOne({ _id: lead.campaignId, owner: req.user._id });
-      if (!campaign) throw fail('Campaign missing.');
-      if (campaign.status !== 'active') throw fail('Activate the campaign before scheduling emails.', 409);
-    }
-  }
-  if (autoFollowup && !outreachConfig().autoFollowupReady) throw fail('Automatic follow-ups require verified receiving and webhook configuration.', 409);
-  // Reserve every selected address atomically BEFORE writing any schedules.
-  // If any address is unavailable, release new reservations and leave the batch untouched.
-  const newlyReserved = [];
+  const { ids, startAt, intervalMinutes, autoFollowup, confirmCampaignId, sendDate } = parsed.data;
+  const ref = randomUUID(), startedAt = Date.now();
+  res.set('X-Outreach-Schedule-Ref', ref);
+  console.info('[outreach-schedule]', JSON.stringify({ ref, event: 'started', requested: ids.length }));
   try {
-    for (const lead of leads) {
-      const existing = await OutreachLease.findOne({ key: `${lead.owner}:${lead.email.toLowerCase()}` });
-      const previouslyOurs = existing && String(existing.leadId) === String(lead._id);
-      await reserveOutreachLead(lead);
-      if (!previouslyOurs) newlyReserved.push(lead);
+    const start = new Date(startAt);
+    if (start.getTime() <= Date.now() + 120000 || start.getTime() > Date.now() + 365 * 86400000) throw fail('Schedule between two minutes and one year in the future.');
+    let leads = await OutreachLead.find({ owner: req.user._id, publicId: { $in: ids } }).select('+owner').sort({ createdAt: 1, _id: 1 });
+    if (leads.length !== new Set(ids).size) throw fail('One or more contacts were not found.');
+    const eligibility = await outreachEligibility(req.user._id, leads);
+    const skipped = [], seen = new Set();
+    leads = leads.filter(lead => {
+      const reason = eligibility.get(lead.publicId).reason || (seen.has(lead.email) ? 'Duplicate address in selection' : '');
+      if (reason) { skipped.push({ publicId: lead.publicId, reason }); return false; }
+      seen.add(lead.email); return true;
+    });
+    if (!leads.length) throw fail('No eligible contacts remain. Refresh the campaign to review the reasons.', 409);
+    let confirmingCampaign = null;
+    if (confirmCampaignId) {
+      confirmingCampaign = await OutreachCampaign.findOne({ _id: confirmCampaignId, owner: req.user._id });
+      if (!confirmingCampaign) throw fail('Campaign not found.', 404);
+      if (confirmingCampaign.setupComplete || confirmingCampaign.status !== 'draft') throw fail('Setup has changed. Reopen the campaign before scheduling.', 409);
+      if (leads.some(lead => String(lead.campaignId) !== confirmCampaignId)) throw fail('Select only contacts belonging to this campaign.');
     }
+    const campaignIds = [...new Set(leads.filter(lead => lead.campaignId && String(lead.campaignId) !== confirmCampaignId).map(lead => String(lead.campaignId)))];
+    const activeCampaigns = await OutreachCampaign.find({ _id: { $in: campaignIds }, owner: req.user._id, status: 'active' }).select('_id');
+    if (activeCampaigns.length !== campaignIds.length) throw fail('Activate the campaign before scheduling emails.', 409);
+    if (autoFollowup && !outreachConfig().autoFollowupReady) throw fail('Automatic follow-ups require verified receiving and webhook configuration.', 409);
+    // Reserve every selected address atomically BEFORE writing any schedules.
+    // If any address is unavailable, release new reservations and leave the batch untouched.
+    const newlyReserved = [];
+    try {
+      await runSchedulingTasks(leads, async lead => {
+        const existing = await OutreachLease.findOne({ key: `${lead.owner}:${lead.email.toLowerCase()}` });
+        const previouslyOurs = existing && String(existing.leadId) === String(lead._id);
+        await reserveOutreachLead(lead);
+        if (!previouslyOurs) newlyReserved.push(lead);
+      });
+    } catch (error) {
+      for (const lead of newlyReserved) {
+        // Another request may have queued this same lead after our snapshot.
+        const queued = await OutreachLead.exists({ _id: lead._id, $or: [{ scheduledAt: { $ne: null } }, { sentAt: { $ne: null } }, { initialState: 'sending' }] });
+        if (!queued) await releaseOutreachLead(lead);
+      }
+      throw error;
+    }
+    // Compensating rollback: no half-success response and no orphaned reservations
+    // if a write fails after some addresses have already been reserved. Initial
+    // start is at least two minutes ahead, keeping the worker clear of this batch.
+    const written = [];
+    try {
+      await runSchedulingTasks(leads, async (lead, index) => {
+        const at = new Date(start.getTime() + index * intervalMinutes * 60000);
+        const change = await OutreachLead.updateOne({ _id: lead._id, owner: req.user._id,
+          initialState: 'pending', stoppedReason: '', sentAt: null, repliedAt: null, optedOutAt: null, scheduledAt: null, updatedAt: lead.updatedAt },
+        { $set: { scheduledAt: at, status: 'scheduled', autoFollowup: autoFollowup && !!lead.followup } });
+        if (!change.modifiedCount) throw fail(`Contact ${lead.email} changed during scheduling. Retry the batch.`, 409);
+        written.push({ lead, at });
+      });
+      if (confirmingCampaign) {
+        const changed = await OutreachCampaign.updateOne({ _id: confirmingCampaign._id, owner: req.user._id, status: 'draft', setupComplete: false, updatedAt: confirmingCampaign.updatedAt },
+          { $set: { status: 'active', setupComplete: true, setupStep: 4, ...(sendDate ? { sendDate } : {}), spacing: intervalMinutes, scheduleFollowups: autoFollowup } });
+        if (!changed.modifiedCount) throw fail('Campaign changed during confirmation. Reopen it and retry.', 409);
+      }
+    } catch (error) {
+      for (const { lead, at } of written) {
+        await OutreachLead.updateOne({ _id: lead._id, initialState: 'pending', sentAt: null, scheduledAt: at, stoppedReason: '', repliedAt: null, optedOutAt: null },
+          { $set: { scheduledAt: null, status: 'draft', autoFollowup: false } });
+      }
+      for (const lead of newlyReserved) {
+        // Another request may have queued this same lead after our snapshot.
+        const queued = await OutreachLead.exists({ _id: lead._id, $or: [{ scheduledAt: { $ne: null } }, { sentAt: { $ne: null } }, { initialState: 'sending' }] });
+        if (!queued) await releaseOutreachLead(lead);
+      }
+      throw error;
+    }
+    const scheduled = written.length;
+    console.info('[outreach-schedule]', JSON.stringify({ ref, event: 'complete', scheduled, skipped: skipped.length, elapsedMs: Date.now() - startedAt }));
+    res.json({ scheduled, skipped });
   } catch (error) {
-    for (const lead of newlyReserved) await releaseOutreachLead(lead);
+    console.warn('[outreach-schedule]', JSON.stringify({ ref, event: 'failed', status: error.status || 500, elapsedMs: Date.now() - startedAt }));
     throw error;
   }
-  // Compensating rollback: no half-success response and no orphaned reservations
-  // if a write fails after some addresses have already been reserved. Initial
-  // start is at least two minutes ahead, keeping the worker clear of this batch.
-  const written = [];
-  try {
-    for (const [index, lead] of leads.entries()) {
-      const at = new Date(start.getTime() + index * intervalMinutes * 60000);
-      const change = await OutreachLead.updateOne({ _id: lead._id, owner: req.user._id,
-        initialState: 'pending', stoppedReason: '', sentAt: null, scheduledAt: null },
-      { $set: { scheduledAt: at, status: 'scheduled', autoFollowup: autoFollowup && !!lead.followup } });
-      if (!change.modifiedCount) throw fail(`Contact ${lead.email} changed during scheduling. Retry the batch.`, 409);
-      written.push(lead);
-    }
-  } catch (error) {
-    for (const lead of written) {
-      await OutreachLead.updateOne({ _id: lead._id, initialState: 'pending', sentAt: null },
-        { $set: { scheduledAt: null, status: 'draft', autoFollowup: false } });
-    }
-    for (const lead of newlyReserved) await releaseOutreachLead(lead);
-    throw error;
-  }
-  const scheduled = written.length;
-  res.json({ scheduled });
 });
 router.post('/:publicId/unschedule', async (req, res) => {
   const lead = await OutreachLead.findOne({ owner: req.user._id, publicId: req.params.publicId }).select('+owner');

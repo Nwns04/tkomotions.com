@@ -21,6 +21,24 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
       smoothWheel: true,
       respectReducedMotion: true,
     });
+    // A modal must also stop an animation that was already in progress.
+    // Counting locks avoids resuming while another modal still needs the lock.
+    let modalLocks = 0;
+    let resumeAfterModal = false;
+    const handleModalScrollLock = (event: Event) => {
+      const locked = (event as CustomEvent<{ locked?: boolean }>).detail?.locked;
+      if (locked === true) {
+        if (modalLocks === 0) {
+          resumeAfterModal = !lenis.isStopped;
+          lenis.stop();
+        }
+        modalLocks++;
+      } else if (locked === false && modalLocks > 0) {
+        modalLocks--;
+        if (modalLocks === 0 && resumeAfterModal) lenis.start();
+      }
+    };
+    window.addEventListener('tko:modal-scroll-lock', handleModalScrollLock);
     lenisRef.current = lenis;
     lenis.on('scroll', ScrollTrigger.update);
 
@@ -29,6 +47,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
     gsap.ticker.lagSmoothing(0);
 
     return () => {
+      window.removeEventListener('tko:modal-scroll-lock', handleModalScrollLock);
       gsap.ticker.remove(raf);
       lenis.destroy();
       lenisRef.current = null;

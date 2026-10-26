@@ -60,3 +60,47 @@ test('field validation limits input, normalizes addresses and rejects unsafe typ
   assert.equal(outreachFields.safeParse({ email: { $ne: null } }).success, false);
   assert.equal(outreachFields.parse({ email: 'a@example.test', owner: 'forged' }).owner, undefined);
 });
+
+test('scheduling selections exclude blocked contacts and cap every batch at 500', async () => {
+  const { schedulingBatch, OUTREACH_SCHEDULE_LIMIT } = await import('../../src/finance/utils/outreachScheduling.js');
+  const leads = Array.from({ length: 503 }, (_, index) => ({ publicId: String(index), scheduling: { eligible: index > 0 } }));
+  const first = schedulingBatch(leads);
+  assert.equal(OUTREACH_SCHEDULE_LIMIT, 500);
+  assert.equal(first.length, 500); assert.equal(first[0].publicId, '1'); assert.equal(first.at(-1).publicId, '500');
+  const queued = new Set(first.map(lead => lead.publicId));
+  const remaining = schedulingBatch(leads.map(lead => ({ ...lead, scheduling: { eligible: lead.scheduling.eligible && !queued.has(lead.publicId) } })));
+  assert.deepEqual(remaining.map(lead => lead.publicId), ['501', '502']);
+  assert.deepEqual(schedulingBatch([{ publicId: 'unclassified' }]), []);
+});
+
+
+test('outreach errors distinguish uncertain requests from validation and conflicts', async () => {
+  const { outreachActionMessage } = await import('../../src/finance/utils/outreachErrors.js');
+  const schedule = { url: '/outreach/schedule' };
+  for (const error of [
+    { isAxiosError: true, config: schedule, code: 'ERR_NETWORK' },
+    { isAxiosError: true, config: schedule, code: 'ECONNABORTED' },
+    { isAxiosError: true, config: schedule, response: { status: 500, data: 'Internal Server Error' } },
+    { isAxiosError: true, config: schedule, response: { status: 504, data: '<html>Gateway timeout</html>' } },
+  ]) assert.match(outreachActionMessage(error), /Scheduling could not be confirmed.*Refresh contacts.*may already be scheduled/);
+  assert.equal(outreachActionMessage({ response: { status: 409, data: { message: 'No eligible contacts remain.' } }, config: schedule }), 'No eligible contacts remain.');
+  assert.equal(outreachActionMessage(new Error('Choose a future time.')), 'Choose a future time.');
+  assert.match(outreachActionMessage({ isAxiosError: true, config: { url: '/outreach/lead/send' } }), /Email status could not be confirmed/);
+});
+
+test('scheduling workers bound concurrency and await all current writes before rollback', async () => {
+  const { runSchedulingTasks } = await import('../services/outreachScheduling.js');
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  let active = 0, peak = 0; const completed = [];
+  await runSchedulingTasks(Array.from({ length: 14 }, (_, index) => index), async (item, index) => {
+    active++; peak = Math.max(peak, active); await sleep(3); completed[index] = item; active--;
+  });
+  assert.equal(active, 0); assert.ok(peak > 1 && peak <= 6); assert.equal(completed.length, 14);
+  const started = []; let pending = 0;
+  await assert.rejects(runSchedulingTasks(Array.from({ length: 8 }, (_, index) => index), async item => {
+    started.push(item); pending++;
+    try { if (item === 0) throw new Error('Simulated write failure'); await sleep(15); }
+    finally { pending--; }
+  }), /Simulated write failure/);
+  assert.equal(pending, 0); assert.deepEqual(started, [0, 1, 2, 3, 4, 5]);
+});

@@ -77,6 +77,68 @@ test('Finance outreach authorization, sending, suppression and webhooks', { time
     await request('/' + lead.publicId + '/send', { method: 'POST', body: { test: false }, status: 400 });
     await request('/' + lead.publicId + '/send', { method: 'POST', body: { test: false, confirmed: true }, status: 503 });
   });
+  await t.test('CSV batches, first confirmation and mixed scheduling preserve existing queues', async () => {
+    const { campaign } = await request('/campaigns', { method: 'POST', body: { name: 'Batch workflow' }, status: 201 });
+    const campaignId = campaign._id;
+    const first = await request('/import', { method: 'POST', body: { campaignId, sourceName: 'first.csv', rows: [fields('batch-first@example.test')] }, status: 201 });
+    assert.equal(first.addedIds.length, 1); assert.ok(first.batchId);
+    let saved = await OutreachLead.findOne({ publicId: first.addedIds[0] });
+    assert.equal(saved.importName, 'first.csv'); assert.equal(saved.scheduledAt, null);
+    const startAt = new Date(Date.now() + 3600000).toISOString();
+    const confirmation = { ids: first.addedIds, startAt, intervalMinutes: 5, autoFollowup: false, confirmCampaignId: campaignId, sendDate: '2026-10-26T10:00' };
+    await request('/schedule', { method: 'POST', body: { ...confirmation, autoFollowup: true }, status: 409 });
+    assert.equal((await OutreachCampaign.findById(campaignId)).status, 'draft');
+    assert.equal((await OutreachLead.findById(saved._id)).scheduledAt, null);
+    const confirmed = await request('/schedule', { method: 'POST', body: confirmation });
+    assert.equal(confirmed.scheduled, 1);
+    const complete = await OutreachCampaign.findById(campaignId);
+    assert.equal(complete.status, 'active'); assert.equal(complete.setupComplete, true);
+    const originalTime = (await OutreachLead.findById(saved._id)).scheduledAt.toISOString();
+    await request('/schedule', { method: 'POST', body: confirmation, status: 409 });
+    const { campaign: elsewhere } = await request('/campaigns', { method: 'POST', body: { name: 'Other scheduled campaign' }, status: 201 });
+    const blocked = await OutreachLead.create({ ...fields('batch-blocked@example.test'), owner: staff._id, campaignId: elsewhere._id, scheduledAt: new Date(startAt), status: 'scheduled' });
+    const rows = [fields('batch-first@example.test'), fields('batch-new@example.test'), fields(blocked.email), fields('batch-new@example.test')];
+    const preview = await request('/import-preview', { method: 'POST', body: { campaignId, rows } });
+    assert.deepEqual(preview.rows.map(row => row.eligible), [false, true, false, false]);
+    const second = await request('/import', { method: 'POST', body: { campaignId, sourceName: 'second.csv', rows }, status: 201 });
+    assert.equal(second.added, 2); assert.equal(second.skipped.length, 2); assert.notEqual(second.batchId, first.batchId);
+    const state = await request('/');
+    const members = state.leads.filter(row => row.campaignId === campaignId);
+    assert.equal(members.filter(row => row.scheduling.eligible).length, 1);
+    assert.match(members.find(row => row.email === blocked.email).scheduling.reason, /Another campaign/);
+    const scheduled = await request('/schedule', { method: 'POST', body: { ids: members.map(row => row.publicId), startAt: new Date(Date.now() + 7200000).toISOString(), intervalMinutes: 5 } });
+    assert.equal(scheduled.scheduled, 1); assert.equal(scheduled.skipped.length, 2);
+    saved = await OutreachLead.findById(saved._id);
+    assert.equal(saved.scheduledAt.toISOString(), originalTime);
+    assert.equal((await OutreachLead.findById(blocked._id)).scheduledAt.toISOString(), startAt);
+    assert.equal(await OutreachLead.countDocuments({ campaignId, sentAt: { $ne: null } }), 0);
+    await request('/import-preview', { method: 'POST', auth: otherCredentials, body: { campaignId, rows }, status: 404 });
+  });
+
+
+  await t.test('parallel scheduling settles writes before rolling back a changed contact', async () => {
+    const campaign = await OutreachCampaign.create({ owner: staff._id, name: 'Rollback fixture', status: 'active', setupComplete: true });
+    const members = await OutreachLead.create(Array.from({ length: 7 }, (_, index) => ({ ...fields('rollback-' + index + '@example.test'), owner: staff._id, campaignId: campaign._id })));
+    const ownedIds = new Set(members.map(lead => String(lead._id)));
+    const originalUpdate = OutreachLead.updateOne;
+    let active = 0, peak = 0;
+    OutreachLead.updateOne = async function(filter, update, ...options) {
+      if (update?.$set?.status !== 'scheduled' || !ownedIds.has(String(filter._id))) return originalUpdate.call(this, filter, update, ...options);
+      active++; peak = Math.max(peak, active);
+      try {
+        if (String(filter._id) === String(members[0]._id)) { await new Promise(resolve => setTimeout(resolve, 5)); return { modifiedCount: 0 }; }
+        await new Promise(resolve => setTimeout(resolve, 25));
+        return await originalUpdate.call(this, filter, update, ...options);
+      } finally { active--; }
+    };
+    try {
+      await request('/schedule', { method: 'POST', body: { ids: members.map(lead => lead.publicId), startAt: new Date(Date.now() + 3600000).toISOString(), intervalMinutes: 5 }, status: 409 });
+    } finally { OutreachLead.updateOne = originalUpdate; }
+    assert.equal(active, 0); assert.ok(peak > 1 && peak <= 6);
+    assert.equal(await OutreachLead.countDocuments({ campaignId: campaign._id, scheduledAt: { $ne: null } }), 0);
+    assert.equal(await OutreachLease.countDocuments({ leadId: { $in: members.map(lead => lead._id) } }), 0);
+  });
+
   let payload, acceptedLead;
   await t.test('provider acceptance persists, attaches unsubscribe and allows only one initial send', async () => {
     await OutreachRate.deleteMany({});

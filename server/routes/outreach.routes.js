@@ -1,3 +1,5 @@
+import { getConversationAttachment } from '../services/outreachAttachments.js';
+import { listOutreachConversations, getOutreachConversation, markConversationRead, sendConversationResponse } from '../services/outreachConversations.js';
 import { listOutreachReplies, getOutreachReply, syncOutreachReplies, linkOutreachReply } from '../services/outreachReplies.js';
 import express, { Router } from 'express';
 import { randomUUID } from 'node:crypto';
@@ -6,7 +8,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { requireCsrf } from '../middleware/csrf.js';
-import { OutreachLead, OutreachCampaign, OutreachEvent, OutreachSuppression, OutreachWebhookEvent, OutreachLease } from '../models/Outreach.js';
+import { OutreachLead, OutreachCampaign, OutreachEvent, OutreachSuppression, OutreachWebhookEvent, OutreachLease, OutreachReply } from '../models/Outreach.js';
 import { fail, outreachConfig, outreachFields, verifyOutreachWebhook } from '../services/outreachPolicy.js';
 import { sendOutreach, handleOutreachEvent, suppressOutreach, outreachLog, reserveOutreachLead, releaseOutreachLead } from '../services/outreach.js';
 
@@ -69,18 +71,40 @@ router.use(rateLimit({ windowMs: 60000, limit: 120, standardHeaders: 'draft-7', 
 
 router.get('/', async (req, res) => {
   const config = outreachConfig();
-  const [leads, events, counts, campaigns] = await Promise.all([
+  const [leads, events, counts, campaigns, replyUnread, campaignUnread] = await Promise.all([
     OutreachLead.find({ owner: req.user._id }).sort({ createdAt: -1 }).limit(1000),
     OutreachEvent.find({ owner: req.user._id }).sort({ createdAt: -1 }).limit(50),
     OutreachLead.aggregate([{ $match: { owner: req.user._id } }, { $group: { _id: null, total: { $sum: 1 }, sent: { $sum: { $cond: ['$sentAt', 1, 0] } }, replied: { $sum: { $cond: ['$repliedAt', 1, 0] } }, followups: { $sum: { $cond: ['$followupSentAt', 1, 0] } } } }]),
     OutreachCampaign.find({ owner: req.user._id }).sort({ createdAt: -1 }),
+    OutreachReply.countDocuments({ owner: req.user._id, readAt: null }),
+    OutreachReply.aggregate([{ $match: { owner: req.user._id, readAt: null } }, { $unwind: '$links' }, { $group: { _id: '$links.campaignId', unread: { $sum: 1 } } }]),
   ]);
   const eligibility = await outreachEligibility(req.user._id, leads);
   const campaignStats = await campaignCounts(req.user._id);
-  res.json({ leads: leads.map(lead => ({ ...lead.toJSON(), scheduling: eligibility.get(lead.publicId) })), events, campaigns: campaigns.map(campaign => describeCampaign(campaign, campaignStats.get(String(campaign._id)))), stats: counts[0] || { total: 0, sent: 0, replied: 0, followups: 0 },
+  res.json({ leads: leads.map(lead => ({ ...lead.toJSON(), scheduling: eligibility.get(lead.publicId) })), events, campaigns: campaigns.map(campaign => ({ ...describeCampaign(campaign, campaignStats.get(String(campaign._id))), unreadReplies: campaignUnread.find(row => String(row._id) === String(campaign._id))?.unread || 0 })), stats: { ...(counts[0] || { total: 0, sent: 0, replied: 0, followups: 0 }), replyUnread },
     config: { live: config.live, configured: config.configured, requestedLive: config.requestedLive, from: config.from, replyTo: config.replyTo, receiving: config.receiving, replyForwardTo: config.forwardTo, autoFollowupReady: config.autoFollowupReady } });
 });
 
+router.get('/conversations', async (req, res) => res.json(await listOutreachConversations(req.user._id, req.query)));
+router.get('/conversations/:threadId', async (req, res) => res.json(await getOutreachConversation(req.user._id, req.params.threadId, req.query)));
+router.get('/conversations/:threadId/attachments/:messageId/:index', async (req, res) => {
+  const file = await getConversationAttachment(req.user._id, req.params.threadId, req.params.messageId, req.params.index);
+  res.set('X-Content-Type-Options', 'nosniff').attachment(file.filename).type('application/octet-stream').send(file.bytes);
+});
+router.post('/conversations/:threadId/read', async (req, res) => {
+  const input = z.object({ replyIds: z.array(z.string().uuid()).max(100) }).strict().safeParse(req.body);
+  if (!input.success) throw fail('Invalid read receipt.');
+  res.json(await markConversationRead(req.user._id, req.params.threadId, input.data.replyIds));
+});
+router.post('/conversations/:threadId/send', async (req, res) => {
+  const input = z.object({ body: z.string().trim().min(1).max(12000), replyId: z.string().uuid(), requestId: z.string().uuid(), confirmed: z.literal(true), attachments: z.array(z.object({ filename: z.string().max(180), content: z.string().max(6990508) }).strict()).max(5).optional() }).strict().safeParse(req.body);
+  if (!input.success) throw fail('Review the recipient and enter a response before confirming send.');
+  try { res.json(await sendConversationResponse(req.user._id, req.params.threadId, input.data)); }
+  catch (error) {
+    if (error.code === 'OUTREACH_REPLY_CHANGED') return res.status(409).json({ message: error.message, code: error.code });
+    throw error;
+  }
+});
 router.get('/replies', async (req, res) => res.json(await listOutreachReplies(req.user._id, req.query)));
 router.get('/replies/:replyId', async (req, res) => res.json({ reply: await getOutreachReply(req.user._id, req.params.replyId) }));
 router.post('/replies/sync', async (req, res) => {

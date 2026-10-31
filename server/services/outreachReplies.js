@@ -107,8 +107,10 @@ export async function receiveOutreachReply(metadata, config, { transport = globa
   for (const owner of owners) {
     const links = leads.filter(lead => String(lead.owner) === owner).map(lead => ({ leadId: lead.publicId, campaignId: lead.campaignId, company: lead.company || lead.email }));
     const fields = { from: String(data.from || metadata.from).slice(0, 500), to: (data.to || []).map(String), subject: String(data.subject || '(No subject)').slice(0, 1000), receivedAt,
+      internetMessageId: String(data.message_id || metadata.message_id || '').replace(/[\r\n]/g, '').slice(0, 1000),
+      references: String(data.headers?.references || data.headers?.References || '').replace(/[\r\n]/g, ' ').slice(-2000),
       bodyText: fullText.slice(0, 200000), truncated: fullText.length > 200000,
-      attachments: (data.attachments || []).slice(0, 50).map(a => ({ filename: String(a.filename || 'Attachment').slice(0, 300), size: Math.max(0, Number(a.size) || 0) })),
+      attachments: (data.attachments || []).slice(0, 50).map(a => ({ providerId: String(a.id || '').slice(0, 200), filename: String(a.filename || 'Attachment').slice(0, 300), size: Math.max(0, Number(a.size) || 0) })),
       links, matchMethod: links.length ? match.method : 'unmatched',
     };
     // Retry-safe upsert; already linked records cannot be replaced by a weaker match.

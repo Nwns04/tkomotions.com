@@ -17,6 +17,7 @@ import catalogRoutes from './routes/catalog.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import outreachRoutes, { outreachPublicRouter } from './routes/outreach.routes.js';
 import { errorHandler, notFound } from './middleware/errors.js';
+import { outreachSendBody } from './middleware/outreachSendBody.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -27,6 +28,7 @@ app.use(helmet({
 }));
 // Signed webhooks require the exact raw body before the global JSON parser.
 app.use('/api/finance/outreach', outreachPublicRouter);
+app.use('/api/finance/outreach/conversations/:threadId/send', ...outreachSendBody);
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(session({

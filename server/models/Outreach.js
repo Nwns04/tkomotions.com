@@ -105,8 +105,11 @@ const replySchema = new mongoose.Schema({
   from: String, subject: String, to: [String], receivedAt: Date,
   bodyText: { type: String, default: '', select: false },
   truncated: { type: Boolean, default: false },
-  attachments: [{ _id: false, filename: String, size: Number }],
+  attachments: [{ _id: false, filename: String, size: Number, providerId: String }],
   links: [{ _id: false, leadId: String, campaignId: mongoose.Schema.Types.ObjectId, company: String }],
+  internetMessageId: { type: String, default: '', select: false },
+  references: { type: String, default: '', select: false },
+  readAt: { type: Date, default: null },
   matchMethod: { type: String, default: 'unmatched' },
   forwardState: { type: String, default: 'pending' },
   forwardMessageId: String, forwardedAt: Date,
@@ -114,3 +117,19 @@ const replySchema = new mongoose.Schema({
 replySchema.index({ owner: 1, providerId: 1 }, { unique: true });
 replySchema.index({ owner: 1, receivedAt: -1, _id: -1 });
 export const OutreachReply = mongoose.models.OutreachReply || mongoose.model('OutreachReply', replySchema);
+
+const conversationMessageSchema = new mongoose.Schema({
+  publicId: { type: String, default: () => randomUUID(), unique: true },
+  owner: { type: mongoose.Schema.Types.ObjectId, required: true, select: false },
+  leadId: { type: String, required: true }, campaignId: mongoose.Schema.Types.ObjectId,
+  requestId: { type: String, required: true }, replyId: { type: String, required: true },
+  from: String, to: String, subject: String, bodyText: String,
+  attachments: [{ _id: false, filename: String, size: Number, sha256: String, providerId: String }],
+  state: { type: String, enum: ['sending', 'sent', 'review', 'cancelled'], default: 'sending' },
+  providerId: String, sentAt: Date, deliveryStatus: String,
+}, { timestamps: true, toJSON: publicJson });
+conversationMessageSchema.index({ owner: 1, requestId: 1 }, { unique: true });
+conversationMessageSchema.index({ owner: 1, leadId: 1 }, { unique: true, partialFilterExpression: { state: { $in: ['sending', 'review'] } } });
+conversationMessageSchema.index({ owner: 1, leadId: 1, createdAt: -1 });
+conversationMessageSchema.index({ providerId: 1 });
+export const OutreachConversationMessage = mongoose.models.OutreachConversationMessage || mongoose.model('OutreachConversationMessage', conversationMessageSchema);

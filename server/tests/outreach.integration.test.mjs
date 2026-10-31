@@ -1,6 +1,7 @@
 ﻿import test from 'node:test';
+import { outreachSendBody } from '../middleware/outreachSendBody.js';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import express from 'express';
 import session from 'express-session';
 import mongoose from 'mongoose';
@@ -9,7 +10,7 @@ import bcrypt from 'bcryptjs';
 assert.equal(process.env.MONGODB_URI, process.env.TKO_BASELINE_OWNED_DB);
 assert.match(process.env.MONGODB_URI || '', /^mongodb:\/\/127\.0\.0\.1:\d+\/tko_baseline\?replicaSet=tkoBaseline$/);
 const { User } = await import('../models/User.js');
-const { OutreachLead, OutreachCampaign, OutreachSuppression, OutreachRate, OutreachLease, OutreachEvent, OutreachReply, OutreachWebhookEvent } = await import('../models/Outreach.js');
+const { OutreachLead, OutreachCampaign, OutreachSuppression, OutreachRate, OutreachLease, OutreachEvent, OutreachReply, OutreachWebhookEvent, OutreachConversationMessage } = await import('../models/Outreach.js');
 const { default: routes, outreachPublicRouter } = await import('../routes/outreach.routes.js');
 const { sendOutreach, handleOutreachEvent, processOutreachFollowups } = await import('../services/outreach.js');
 const config = { live: true, from: 'TKO <sender@example.test>', replyTo: 'replies@example.test', origin: 'https://example.test', receiving: true, autoFollowupReady: true };
@@ -28,6 +29,7 @@ test('Finance outreach authorization, sending, suppression and webhooks', { time
   ]);
   const app = express(); app.set('trust proxy', 1);
   app.use('/api/finance/outreach', outreachPublicRouter);
+  app.use('/api/finance/outreach/conversations/:threadId/send', ...outreachSendBody);
   app.use(express.json());
   const store = new session.MemoryStore();
   app.use(session({ secret: process.env.SESSION_SECRET, resave: false, saveUninitialized: false, store }));
@@ -469,6 +471,214 @@ test('Finance outreach authorization, sending, suppression and webhooks', { time
       globalThis.fetch = originalFetch;
       for (const key of keys) { if (originalEnv[key] === undefined) delete process.env[key]; else process.env[key] = originalEnv[key]; }
     }
+  });
+
+
+  let chatLead, chatCampaign, chatReply;
+  await t.test('conversation timeline joins our outreach and follow-ups with replies; read receipts are scoped', async () => {
+    chatCampaign = await OutreachCampaign.create({ owner: staff._id, name: 'Chat fixture campaign', status: 'active' });
+    chatLead = await OutreachLead.create({ ...fields('chat-original@example.test'), owner: staff._id, campaignId: chatCampaign._id, initialState: 'accepted', status: 'replied', stoppedReason: 'replied', repliedAt: new Date(), sentAt: new Date('2026-10-20T10:00:00Z'), followupSentAt: new Date('2026-10-22T10:00:00Z'), followup2SentAt: new Date('2026-10-24T10:00:00Z'), followup2: 'Our second follow-up', autoFollowup: false });
+    const links = [{ leadId: chatLead.publicId, campaignId: chatCampaign._id, company: 'Chat company' }];
+    const first = await OutreachReply.create({ owner: staff._id, providerId: 'chat-incoming-1', from: 'chat-respondent@example.test', subject: 'Re: Practical outline', receivedAt: new Date('2026-10-26T10:00:00Z'), bodyText: 'Please share your outline.', links });
+    chatReply = await OutreachReply.create({ owner: staff._id, providerId: 'chat-incoming-2', from: 'chat-respondent@example.test', subject: 'Re: Practical outline', receivedAt: new Date('2026-10-28T10:00:00Z'), bodyText: 'Also include the expected timeline.', links });
+    const id = 'lead:' + chatLead.publicId;
+    const list = await request('/conversations?campaignId=' + chatCampaign._id);
+    assert.equal(list.conversations.length, 1); assert.equal(list.conversations[0].unread, 2); assert.equal(list.conversations[0].bodyText, undefined);
+    const timeline = await request('/conversations/' + id);
+    assert.deepEqual(timeline.messages.map(m => m.kind), ['initial', 'followup', 'followup', 'reply', 'reply']);
+    assert.equal(timeline.messages[0].body, chatLead.message); assert.equal(timeline.messages.at(-1).body, chatReply.bodyText);
+    assert.equal(timeline.recipient, 'chat-respondent@example.test');
+    await request('/conversations/' + id, { auth: otherCredentials, status: 404 });
+    await request('/conversations', { auth: publicCredentials, status: 403 });
+    const newest = await OutreachReply.create({ owner: staff._id, providerId: 'chat-incoming-3', from: 'chat-respondent@example.test', subject: 'Re: Practical outline', receivedAt: new Date(), bodyText: 'One more detail.', links });
+    await request('/conversations/' + id + '/read', { method: 'POST', body: { replyIds: [first.publicId, chatReply.publicId] } });
+    assert.equal((await OutreachReply.findById(newest._id)).readAt, null);
+    assert.equal((await request('/conversations?campaignId=' + chatCampaign._id)).conversations[0].unread, 1);
+    const stale = { body: 'Keep this draft for the newest reply.', replyId: chatReply.publicId, requestId: randomUUID(), confirmed: true };
+    chatReply = newest;
+    const settings = { RESEND_API_KEY: 'synthetic-no-network', OUTREACH_FROM_EMAIL: 'sender@example.test', OUTREACH_REPLY_TO: 'replies@example.test', APP_ORIGIN: 'https://example.test', OUTREACH_LIVE_ENABLED: 'true', OUTREACH_RECEIVING_ENABLED: 'true', OUTREACH_WEBHOOK_SECRET: 'synthetic-signing-secret' };
+    const previousSettings = Object.fromEntries(Object.keys(settings).map(key => [key, process.env[key]]));
+    try {
+      Object.assign(process.env, settings);
+      const rejected = await request('/conversations/' + id + '/send', { method: 'POST', body: stale, status: 409 });
+      assert.equal(rejected.code, 'OUTREACH_REPLY_CHANGED');
+      assert.equal(await OutreachConversationMessage.countDocuments({ owner: staff._id, requestId: stale.requestId }), 0);
+    } finally {
+      for (const key of Object.keys(settings)) { if (previousSettings[key] === undefined) delete process.env[key]; else process.env[key] = previousSettings[key]; }
+    }
+    const send = { body: 'Our response', replyId: chatReply.publicId, requestId: randomUUID(), confirmed: true };
+    await request('/conversations/' + id + '/send', { method: 'POST', token: '', body: send, status: 403 });
+    await request('/conversations/' + id + '/send', { method: 'POST', auth: publicCredentials, body: send, status: 403 });
+    await request('/conversations/' + id + '/send', { method: 'POST', auth: otherCredentials, body: send, status: 404 });
+  });
+  await t.test('chat responses preserve email threading and recipient, record once and obey sending policies', async () => {
+    const { sendConversationResponse } = await import('../services/outreachConversations.js');
+    const replyConfig = { ...config, secret: 'chat-signing-key' };
+    const id = 'lead:' + chatLead.publicId, requestId = randomUUID(), input = { body: 'Here is our proposed outline.', replyId: chatReply.publicId, requestId };
+    let posts = 0, gets = 0, payload;
+    const transport = async (_url, options) => {
+      if (!options.method) { gets++; return { ok: true, json: async () => ({ message_id: '<original-reply@example.test>' }) }; }
+      posts++; payload = JSON.parse(options.body); assert.ok(options.headers['Idempotency-Key']);
+      return { ok: true, json: async () => ({ id: 'chat-accepted' }) };
+    };
+    await OutreachCampaign.updateOne({ _id: chatCampaign._id }, { $set: { status: 'archived' } });
+    await assert.rejects(sendConversationResponse(staff._id, id, input, { config: replyConfig, transport }), /Restore this campaign/);
+    await OutreachCampaign.updateOne({ _id: chatCampaign._id }, { $set: { status: 'paused' } });
+    await OutreachSuppression.create({ email: 'chat-respondent@example.test', reason: 'opted-out' });
+    await assert.rejects(sendConversationResponse(staff._id, id, input, { config: replyConfig, transport }), /suppressed/);
+    await OutreachSuppression.deleteOne({ email: 'chat-respondent@example.test' });
+    await OutreachRate.deleteMany({});
+    const result = await sendConversationResponse(staff._id, id, input, { config: replyConfig, transport });
+    assert.equal(posts, 1); assert.equal(gets, 1); assert.equal(result.message.state, 'sent');
+    const listed = await request('/conversations?campaignId=' + chatCampaign._id); assert.equal(listed.conversations[0].sortAt, result.message.sentAt.toISOString());
+    assert.deepEqual(payload.to, ['chat-respondent@example.test']); assert.equal(payload.headers['In-Reply-To'], '<original-reply@example.test>'); assert.match(payload.headers.References, /original-reply/);
+    assert.notEqual(payload.reply_to, config.replyTo); assert.equal(payload.text, input.body); assert.equal(payload.subject, 'Re: Practical outline');
+    assert.equal((await OutreachLead.findById(chatLead._id)).autoFollowup, false);
+    assert.equal((await sendConversationResponse(staff._id, id, input, { config: { ...replyConfig, live: false }, transport })).duplicate, true);
+    await assert.rejects(sendConversationResponse(staff._id, id, { ...input, body: 'Changed body' }, { config: replyConfig, transport }), /another response/);
+    assert.equal(posts, 1);
+    const timeline = await request('/conversations/' + id); assert.ok(timeline.messages.some(m => m.kind === 'response' && m.body === input.body));
+    await handleOutreachEvent({ type: 'email.bounced', data: { email_id: 'chat-accepted', to: ['chat-respondent@example.test'] } }, config);
+    await handleOutreachEvent({ type: 'email.delivered', data: { email_id: 'chat-accepted' } }, config);
+    assert.equal((await OutreachConversationMessage.findById(result.message._id)).deliveryStatus, 'bounced');
+    await OutreachSuppression.deleteOne({ email: 'chat-respondent@example.test' });
+  });
+  await t.test('ambiguous or concurrent conversation sends cannot duplicate an email', async () => {
+    const { sendConversationResponse } = await import('../services/outreachConversations.js');
+    const replyConfig = { ...config, secret: 'chat-signing-key' }, id = 'lead:' + chatLead.publicId;
+    const input = { body: 'A further detail.', replyId: chatReply.publicId, requestId: randomUUID() };
+    await OutreachRate.deleteMany({});
+    let release, entered, posts = 0;
+    const started = new Promise(resolve => { entered = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    const transport = async () => { posts++; entered(); await gate; return { ok: true, json: async () => ({ id: 'chat-concurrent' }) }; };
+    const first = sendConversationResponse(staff._id, id, input, { config: replyConfig, transport });
+    await started;
+    try {
+      await assert.rejects(sendConversationResponse(staff._id, id, { ...input, requestId: randomUUID() }, { config: replyConfig, transport }), /sending or needs delivery review/);
+    } finally { release(); }
+    await first; assert.equal(posts, 1);
+    await OutreachRate.deleteMany({});
+    const uncertain = { ...input, requestId: randomUUID(), body: 'A response with an interrupted connection.' };
+    const failing = async () => { posts++; throw Error('Connection lost'); };
+    await assert.rejects(sendConversationResponse(staff._id, id, uncertain, { config: replyConfig, transport: failing }), /Delivery could not be confirmed/);
+    await assert.rejects(sendConversationResponse(staff._id, id, uncertain, { config: replyConfig, transport: failing }), /delivery review/);
+    assert.equal(posts, 2);
+    assert.equal((await request('/conversations/' + id)).canSend, false);
+  });
+  await t.test('a stop during original-thread retrieval cancels the response before transport', async () => {
+    const { sendConversationResponse } = await import('../services/outreachConversations.js');
+    const campaign = await OutreachCampaign.create({ owner: staff._id, name: 'Stop-before-response', status: 'active' });
+    const lead = await OutreachLead.create({ ...fields('chat-stop@example.test'), owner: staff._id, campaignId: campaign._id, sentAt: new Date('2026-10-20T10:00:00Z'), initialState: 'accepted' });
+    const reply = await OutreachReply.create({ owner: staff._id, providerId: 'chat-stop-parent', from: lead.email, receivedAt: new Date(), subject: 'Re: Stop fixture', links: [{ leadId: lead.publicId, campaignId: campaign._id }], bodyText: 'A reply' });
+    let posts = 0;
+    await OutreachRate.deleteMany({});
+    await assert.rejects(sendConversationResponse(staff._id, 'lead:' + lead.publicId, { body: 'Must not be sent', replyId: reply.publicId, requestId: randomUUID() }, { config, transport: async (_url, options) => {
+      if (options.method) { posts++; throw Error('Unexpected send'); }
+      await OutreachCampaign.updateOne({ _id: campaign._id }, { $set: { status: 'archived' } });
+      return { ok: true, json: async () => ({ message_id: '<stop-parent@example.test>' }) };
+    } }), /Sending stopped before/);
+    assert.equal(posts, 0); assert.equal((await OutreachConversationMessage.findOne({ owner: staff._id, leadId: lead.publicId })).state, 'cancelled');
+  });
+  await t.test('conversation pagination preserves the complete timeline and account boundaries', async () => {
+    const campaign = await OutreachCampaign.create({ owner: staff._id, name: 'Long conversation', status: 'active' });
+    const lead = await OutreachLead.create({ ...fields('long-chat@example.test'), owner: staff._id, campaignId: campaign._id, sentAt: new Date('2026-10-01T00:00:00Z'), initialState: 'accepted' });
+    await OutreachReply.insertMany(Array.from({ length: 105 }, (_, index) => ({ owner: staff._id, providerId: 'long-chat-' + index, from: lead.email, subject: 'Long thread', receivedAt: new Date(Date.UTC(2026, 9, 2) + index * 60000), bodyText: 'Message ' + index, links: [{ leadId: lead.publicId, campaignId: campaign._id }] })));
+    const path = '/conversations/lead:' + lead.publicId;
+    const first = await request(path); assert.equal(first.messages.length, 100); assert.ok(first.nextCursor);
+    const older = await request(path + '?before=' + encodeURIComponent(first.nextCursor));
+    assert.equal(older.messages.length, 6); assert.equal(older.messages[0].kind, 'initial');
+    assert.equal(new Set([...older.messages, ...first.messages].map(m => m.id)).size, 106);
+    await OutreachReply.insertMany(Array.from({ length: 52 }, (_, index) => ({ owner: staff._id, providerId: 'unmatched-page-' + index, from: 'unmatched-' + index + '@example.test', subject: 'Unmatched', receivedAt: new Date(Date.UTC(2026, 9, 31) + index * 60000), bodyText: 'Private reply', links: [] })));
+    const conversations = await request('/conversations'); assert.equal(conversations.conversations.length, 50); assert.ok(conversations.nextCursor);
+    const next = await request('/conversations?before=' + encodeURIComponent(conversations.nextCursor));
+    assert.ok(next.conversations.length); assert.ok(!next.conversations.some(item => conversations.conversations.some(previous => previous.id === item.id)));
+    assert.equal((await request('/conversations', { auth: otherCredentials })).conversations.length, 0);
+  });
+
+  await t.test('attachments send once with their reply and downloads stay within the owning conversation', async () => {
+    const { getConversationAttachment, normalizeResponseAttachments } = await import('../services/outreachAttachments.js');
+    const campaign = await OutreachCampaign.create({ owner: staff._id, name: 'Attachment fixture', status: 'active' });
+    const lead = await OutreachLead.create({ ...fields('attachments@example.test'), owner: staff._id, campaignId: campaign._id, sentAt: new Date('2026-10-20T10:00:00Z'), initialState: 'accepted', status: 'replied', stoppedReason: 'replied' });
+    const attachmentId = randomUUID(), thread = 'lead:' + lead.publicId;
+    const reply = await OutreachReply.create({ owner: staff._id, providerId: 'attachment-incoming', from: 'attachments@example.test', subject: 'Re: Files', receivedAt: new Date(), bodyText: 'Please see the file.', internetMessageId: '<incoming-file@example.test>', attachments: [{ filename: 'received.pdf', size: 8, providerId: attachmentId }, { filename: 'legacy.txt', size: 8 }], links: [{ leadId: lead.publicId, campaignId: campaign._id }] });
+    const bytes = Buffer.alloc(5 * 1024 * 1024, 65), body = { body: 'Here is our proposal.', replyId: reply.publicId, requestId: randomUUID(), confirmed: true, attachments: [{ filename: 'proposal.pdf', content: bytes.toString('base64') }] };
+    const settings = { RESEND_API_KEY: 'synthetic-no-network', OUTREACH_FROM_EMAIL: 'sender@example.test', OUTREACH_REPLY_TO: 'replies@example.test', APP_ORIGIN: 'https://example.test', OUTREACH_LIVE_ENABLED: 'true', OUTREACH_RECEIVING_ENABLED: 'true', OUTREACH_WEBHOOK_SECRET: 'synthetic-signing-secret' };
+    const previous = Object.fromEntries(Object.keys(settings).map(key => [key, process.env[key]])), originalFetch = globalThis.fetch;
+    let posts = 0, downloads = 0, payload;
+    globalThis.fetch = async (url, options) => {
+      if (String(url).startsWith('http://127.0.0.1:')) return originalFetch(url, options);
+      if (String(url) === 'https://api.resend.com/emails') { posts++; payload = JSON.parse(options.body); return Response.json({ id: 'attachment-sent' }); }
+      if (String(url).startsWith('https://api.resend.com/emails/')) {
+        const metadata = { id: attachmentId, filename: String(url).includes('attachment-sent') ? 'proposal.pdf' : 'received.pdf', size: String(url).includes('attachment-sent') ? bytes.length : 8, download_url: 'https://inbound-cdn.resend.com/fixture' };
+        return Response.json(String(url).includes('?limit=') ? { data: [{ ...metadata, filename: String(url).includes('attachment-sent') ? 'proposal.pdf' : 'legacy.txt' }] } : metadata);
+      }
+      assert.equal(String(url), 'https://inbound-cdn.resend.com/fixture'); assert.equal(options.headers, undefined); assert.equal(options.redirect, 'error'); downloads++;
+      return new Response(Buffer.from('filedata'));
+    };
+    try {
+      Object.assign(process.env, settings); await OutreachRate.deleteMany({});
+      const sent = await request('/conversations/' + thread + '/send', { method: 'POST', body });
+      assert.equal(posts, 1); assert.deepEqual(Buffer.from(payload.attachments[0].content, 'base64'), bytes);
+      assert.deepEqual(payload.attachments.map(a => a.filename), ['proposal.pdf']);
+      assert.equal(sent.message.attachments[0].size, bytes.length); assert.equal(sent.message.attachments[0].content, undefined); assert.match(sent.message.attachments[0].sha256, /^[a-f0-9]{64}$/);
+      await request('/conversations/' + thread + '/send', { method: 'POST', body }); assert.equal(posts, 1);
+      await request('/conversations/' + thread + '/send', { method: 'POST', body: { ...body, attachments: [{ filename: 'proposal.pdf', content: Buffer.from('different').toString('base64') }] }, status: 409 }); assert.equal(posts, 1);
+      const timeline = await request('/conversations/' + thread); assert.equal(timeline.messages.find(m => m.id === 'out:' + sent.message.publicId).attachments[0].filename, 'proposal.pdf');
+      const path = '/outreach/conversations/' + thread + '/attachments/in:' + reply.publicId + '/0';
+      const response = await originalFetch(origin + path, { headers: { Cookie: credentials.cookie } }); assert.equal(response.status, 200); assert.match(response.headers.get('content-disposition'), /^attachment;.*received.pdf/); assert.equal(response.headers.get('x-content-type-options'), 'nosniff'); assert.equal(await response.text(), 'filedata');
+      assert.equal((await getConversationAttachment(staff._id, thread, 'in:' + reply.publicId, '1')).bytes.toString(), 'filedata');
+      assert.equal((await getConversationAttachment(staff._id, thread, 'out:' + sent.message.publicId, '0')).bytes.toString(), 'filedata');
+      const beforeDenied = downloads;
+      await request('/conversations/' + thread + '/attachments/in:' + reply.publicId + '/0', { auth: otherCredentials, status: 404 });
+      await request('/conversations/' + thread + '/attachments/in:' + reply.publicId + '/0', { auth: publicCredentials, status: 403 });
+      await assert.rejects(getConversationAttachment(staff._id, 'lead:' + randomUUID(), 'in:' + reply.publicId, '0'), /not found/);
+      await assert.rejects(getConversationAttachment(staff._id, thread, 'in:' + reply.publicId, '99'), /not found/); assert.equal(downloads, beforeDenied);
+      await assert.rejects(getConversationAttachment(staff._id, thread, 'in:' + reply.publicId, '0', { transport: async () => Response.json({ download_url: 'https://127.0.0.1/private' }) }), /unavailable/);
+      await assert.rejects(getConversationAttachment(staff._id, thread, 'in:' + reply.publicId, '0', { transport: async () => Response.json({ size: 41 * 1024 * 1024, download_url: 'https://inbound-cdn.resend.com/fixture' }) }), /too large/);
+      assert.throws(() => normalizeResponseAttachments([{ filename: '../file.pdf', content: 'Zg==' }]), /valid filename/);
+      assert.throws(() => normalizeResponseAttachments([{ filename: 'bad.exe', content: 'Zg==' }]), /valid filename/);
+      assert.throws(() => normalizeResponseAttachments([{ filename: 'bad.pdf', content: 'not base64!' }]), /could not be read/);
+      assert.throws(() => normalizeResponseAttachments(Array(6).fill({ filename: 'file.pdf', content: 'Zg==' })), /up to 5/);
+      assert.throws(() => normalizeResponseAttachments(Array(5).fill(body.attachments[0])), /5 MB or less/);
+      await request('/conversations/' + thread + '/send', { method: 'POST', body: { ...body, requestId: randomUUID(), attachments: [{ filename: 'bad.exe', content: 'Zg==' }] }, status: 400 });
+      const oversized = await originalFetch(origin + '/outreach/conversations/' + thread + '/send', { method: 'POST', headers: { Cookie: credentials.cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': credentials.token }, body: JSON.stringify({ ...body, body: 'x'.repeat(8 * 1024 * 1024) }) }); assert.equal(oversized.status, 413); assert.match((await oversized.json()).message, /5 MB/);
+    } finally {
+      globalThis.fetch = originalFetch;
+      for (const key of Object.keys(settings)) { if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key]; }
+    }
+  });
+
+  await t.test('same-name same-size response attachments download by content and retain provider IDs', async () => {
+    const { sendConversationResponse } = await import('../services/outreachConversations.js');
+    const { getConversationAttachment } = await import('../services/outreachAttachments.js');
+    const campaign = await OutreachCampaign.create({ owner: staff._id, name: 'Identical filenames', status: 'active' });
+    const lead = await OutreachLead.create({ ...fields('duplicate-files@example.test'), owner: staff._id, campaignId: campaign._id, sentAt: new Date('2026-10-20T10:00:00Z'), initialState: 'accepted', status: 'replied', stoppedReason: 'replied' });
+    const reply = await OutreachReply.create({ owner: staff._id, providerId: 'duplicate-incoming', from: lead.email, subject: 'Re: Files', receivedAt: new Date(), internetMessageId: '<duplicate-files@example.test>', links: [{ leadId: lead.publicId, campaignId: campaign._id }] });
+    const input = { body: 'Here are both files.', replyId: reply.publicId, requestId: randomUUID(), attachments: ['first', 'other'].map(text => ({ filename: 'proposal.pdf', content: Buffer.from(text).toString('base64') })) };
+    await OutreachRate.deleteMany({});
+    let posts = 0, listings = 0, mismatch = false;
+    const transport = async (url, options) => {
+      if (options.method === 'POST') { posts++; assert.equal(JSON.parse(options.body).attachments.length, 2); return Response.json({ id: 'same-name-sent' }); }
+      if (String(url).includes('?limit=')) { listings++; return Response.json({ data: ['other', 'first'].map(text => ({ id: text, filename: 'proposal.pdf', size: 5, download_url: 'https://inbound-cdn.resend.com/' + text })) }); }
+      if (String(url).startsWith('https://api.resend.com/')) { const id = String(url).split('/').at(-1); return Response.json({ id, size: 5, download_url: 'https://inbound-cdn.resend.com/' + id }); }
+      assert.equal(options.headers, undefined);
+      return new Response(Buffer.from(mismatch ? 'wrong' : String(url).split('/').at(-1)));
+    };
+    const thread = 'lead:' + lead.publicId;
+    const sent = await sendConversationResponse(staff._id, thread, input, { config, transport });
+    const message = 'out:' + sent.message.publicId;
+    assert.equal((await getConversationAttachment(staff._id, thread, message, '0', { transport })).bytes.toString(), 'first');
+    assert.equal((await getConversationAttachment(staff._id, thread, message, '1', { transport })).bytes.toString(), 'other');
+    const stored = await OutreachConversationMessage.findById(sent.message._id);
+    assert.deepEqual(stored.attachments.map(item => item.providerId), ['first', 'other']);
+    assert.equal(listings, 2);
+    assert.equal((await getConversationAttachment(staff._id, thread, message, '0', { transport })).bytes.toString(), 'first'); assert.equal(listings, 2);
+    assert.equal((await sendConversationResponse(staff._id, thread, input, { config, transport })).duplicate, true); assert.equal(posts, 1);
+    await OutreachConversationMessage.updateOne({ _id: stored._id }, { $unset: { 'attachments.0.providerId': '' } });
+    mismatch = true;
+    await assert.rejects(getConversationAttachment(staff._id, thread, message, '0', { transport }), /could not be verified/);
+    assert.equal((await OutreachConversationMessage.findById(stored._id)).attachments[0].providerId, undefined);
   });
 
   await t.test('public webhook verifies the raw payload and rejects stale or forged requests', async () => {

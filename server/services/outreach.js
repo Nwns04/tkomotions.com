@@ -1,6 +1,6 @@
 import { receiveOutreachReply } from './outreachReplies.js';
 import { outreachReplyAddress } from './outreachReplyContent.js';
-import { OutreachLead, OutreachCampaign, OutreachEvent, OutreachSuppression, OutreachRate, OutreachLease } from '../models/Outreach.js';
+import { OutreachLead, OutreachCampaign, OutreachEvent, OutreachSuppression, OutreachRate, OutreachLease, OutreachConversationMessage } from '../models/Outreach.js';
 import { User } from '../models/User.js';
 import { assertSendable, emailSchema, fail, outreachConfig } from './outreachPolicy.js';
 
@@ -42,7 +42,7 @@ export async function suppressOutreach(email, reason) {
   for (const lead of activeLeads) await releaseFinishedSequence(lead);
 }
 
-async function reserveSendSlot() {
+export async function reserveSendSlot() {
   // Shared across API processes and the scheduler. Never rely on a browser timer.
   for (const [key, milliseconds] of [['sender', 2000]]) {
     try { await OutreachRate.updateOne({ key }, { $setOnInsert: { nextAt: new Date(0) } }, { upsert: true }); }
@@ -161,6 +161,15 @@ export async function handleOutreachEvent(event, config = outreachConfig(), opti
     return receiveOutreachReply({ ...data, created_at: data.created_at || event.created_at }, config, options);
   }
   if (!['email.delivered', 'email.bounced', 'email.failed', 'email.complained'].includes(event.type) || typeof data.email_id !== 'string') return;
+  const conversationMessage = await OutreachConversationMessage.findOne({ providerId: data.email_id });
+  if (conversationMessage) {
+    const delivery = event.type.slice(6);
+    if (['bounced', 'complained', 'failed'].includes(delivery) || !['bounced', 'complained', 'failed'].includes(conversationMessage.deliveryStatus)) {
+      await OutreachConversationMessage.updateOne({ _id: conversationMessage._id, ...(['bounced', 'complained', 'failed'].includes(delivery) ? {} : { deliveryStatus: { $nin: ['bounced', 'complained', 'failed'] } }) }, { $set: { deliveryStatus: delivery } });
+    }
+    if (['bounced', 'complained'].includes(delivery)) await suppressOutreach(conversationMessage.to, delivery);
+    return;
+  }
   const lead = await OutreachLead.findOne({ $or: [{ messageId: data.email_id }, { followupMessageId: data.email_id }, { followup2MessageId: data.email_id }] }).select('+owner');
   const type = event.type.slice(6);
   const addresses = (Array.isArray(data.to) ? data.to : []).map(value => emailSchema.safeParse(value)).filter(value => value.success).map(value => value.data);

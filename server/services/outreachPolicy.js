@@ -25,7 +25,9 @@ export function outreachConfig(environment = process.env) {
   const live = environment.OUTREACH_LIVE_ENABLED === 'true' && configured;
   const secret = environment.OUTREACH_WEBHOOK_SECRET || '';
   const receiving = environment.OUTREACH_RECEIVING_ENABLED === 'true' && Boolean(secret);
-  return { from, replyTo, origin, live, configured, secret, receiving,
+  const forwardTo = environment.OUTREACH_REPLY_FORWARD_TO || '';
+  const replyOwnerEmail = environment.OUTREACH_REPLY_OWNER_EMAIL || forwardTo;
+  return { from, replyTo, origin, live, configured, secret, receiving, forwardTo, replyOwnerEmail,
     autoFollowupReady: live && receiving && environment.OUTREACH_AUTO_FOLLOWUP_ENABLED === 'true',
     requestedLive: environment.OUTREACH_LIVE_ENABLED === 'true' };
 }

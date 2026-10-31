@@ -21,13 +21,13 @@ router.get('/session', async (req, res) => {
   const csrfToken = ensureCsrfToken(req);
   if (!req.session.userId) return res.json({ authenticated: false, csrfToken });
 
-  const user = await User.findById(req.session.userId);
+  const user = await User.findById(req.session.userId).select('+accountSource');
   if (!user?.active) return res.json({ authenticated: false, csrfToken });
-  return res.json({ authenticated: true, csrfToken, user: user.toJSON() });
+  return res.json({ authenticated: true, csrfToken, user: { ...user.toJSON(), canUseOutreach: user.accountSource !== 'public' } });
 });
 
 router.post('/login', loginLimiter, validate(loginSchema), async (req, res) => {
-  const user = await User.findOne({ email: req.body.email }).select('+passwordHash');
+  const user = await User.findOne({ email: req.body.email }).select('+passwordHash +accountSource');
   const matches = user?.active && await bcrypt.compare(req.body.password, user.passwordHash);
   if (!matches) return res.status(401).json({ message: 'Email or password is incorrect.' });
 
@@ -36,7 +36,7 @@ router.post('/login', loginLimiter, validate(loginSchema), async (req, res) => {
   const csrfToken = ensureCsrfToken(req);
   user.lastLoginAt = new Date();
   await user.save();
-  return res.json({ authenticated: true, csrfToken, user: user.toJSON() });
+  return res.json({ authenticated: true, csrfToken, user: { ...user.toJSON(), canUseOutreach: user.accountSource !== 'public' } });
 });
 
 router.post('/logout', requireAuth, requireCsrf, async (req, res) => {

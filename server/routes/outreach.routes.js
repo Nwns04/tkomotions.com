@@ -1,3 +1,4 @@
+import { listOutreachReplies, getOutreachReply, syncOutreachReplies, linkOutreachReply } from '../services/outreachReplies.js';
 import express, { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import mongoose from 'mongoose';
@@ -9,6 +10,7 @@ import { OutreachLead, OutreachCampaign, OutreachEvent, OutreachSuppression, Out
 import { fail, outreachConfig, outreachFields, verifyOutreachWebhook } from '../services/outreachPolicy.js';
 import { sendOutreach, handleOutreachEvent, suppressOutreach, outreachLog, reserveOutreachLead, releaseOutreachLead } from '../services/outreach.js';
 
+import { campaignCounts, describeCampaign, campaignSummary, updateCampaignStatus, deleteDraftCampaign } from '../services/outreachCampaigns.js';
 import { runSchedulingTasks } from '../services/outreachScheduling.js';
 import { outreachEligibility } from '../services/outreachEligibility.js';
 
@@ -74,8 +76,22 @@ router.get('/', async (req, res) => {
     OutreachCampaign.find({ owner: req.user._id }).sort({ createdAt: -1 }),
   ]);
   const eligibility = await outreachEligibility(req.user._id, leads);
-  res.json({ leads: leads.map(lead => ({ ...lead.toJSON(), scheduling: eligibility.get(lead.publicId) })), events, campaigns: campaigns.map(campaignResponse), stats: counts[0] || { total: 0, sent: 0, replied: 0, followups: 0 },
-    config: { live: config.live, configured: config.configured, requestedLive: config.requestedLive, from: config.from, replyTo: config.replyTo, receiving: config.receiving, autoFollowupReady: config.autoFollowupReady } });
+  const campaignStats = await campaignCounts(req.user._id);
+  res.json({ leads: leads.map(lead => ({ ...lead.toJSON(), scheduling: eligibility.get(lead.publicId) })), events, campaigns: campaigns.map(campaign => describeCampaign(campaign, campaignStats.get(String(campaign._id)))), stats: counts[0] || { total: 0, sent: 0, replied: 0, followups: 0 },
+    config: { live: config.live, configured: config.configured, requestedLive: config.requestedLive, from: config.from, replyTo: config.replyTo, receiving: config.receiving, replyForwardTo: config.forwardTo, autoFollowupReady: config.autoFollowupReady } });
+});
+
+router.get('/replies', async (req, res) => res.json(await listOutreachReplies(req.user._id, req.query)));
+router.get('/replies/:replyId', async (req, res) => res.json({ reply: await getOutreachReply(req.user._id, req.params.replyId) }));
+router.post('/replies/sync', async (req, res) => {
+  const input = z.object({ after: z.string().uuid().optional() }).strict().safeParse(req.body);
+  if (!input.success) throw fail('Invalid reply import request.');
+  res.json(await syncOutreachReplies(req.user._id, outreachConfig(), { after: input.data.after }));
+});
+router.post('/replies/:replyId/link', async (req, res) => {
+  const input = z.object({ leadId: z.string().uuid() }).strict().safeParse(req.body);
+  if (!input.success) throw fail('Select a contact for this reply.');
+  res.json({ reply: await linkOutreachReply(req.user._id, req.params.replyId, input.data.leadId) });
 });
 
 router.post('/import-preview', async (req, res) => {
@@ -127,6 +143,7 @@ router.post('/import', async (req, res) => {
     if (input.data.campaignId) {
       campaign = await OutreachCampaign.findOne({ owner: req.user._id, _id: input.data.campaignId });
       if (!campaign) throw fail('Campaign not found.', 404);
+      if (campaign.status === 'archived') throw fail('Restore this campaign before importing contacts.', 409);
     }
     phase = 'row-import';
     for (const [index, row] of input.data.rows.entries()) {
@@ -181,16 +198,25 @@ const campaignSettingsInput = z.object({
 router.patch('/campaigns/:id/settings', requireCampaignParam, async (req, res) => {
   const parsed = campaignSettingsInput.safeParse(req.body);
   if (!parsed.success) throw fail('Invalid campaign settings.');
+  const existing = await OutreachCampaign.findOne({ _id: req.params.id, owner: req.user._id });
+  if (!existing) throw fail('Campaign not found.', 404);
+  if (existing.status === 'archived') throw fail('Restore this campaign before editing its settings.', 409);
   const campaign = await OutreachCampaign.findOneAndUpdate(
-    { _id: req.params.id, owner: req.user._id }, { $set: parsed.data }, { new: true, runValidators: true });
+    { _id: req.params.id, owner: req.user._id, status: { $ne: 'archived' } }, { $set: parsed.data }, { new: true, runValidators: true });
   if (!campaign) throw fail('Campaign not found.', 404);
   res.json({ campaign: campaignResponse(campaign) });
 });
+router.get('/campaigns/:id/summary', requireCampaignParam, async (req, res) => res.json({ campaign: await campaignSummary(req.user._id, req.params.id) }));
+const campaignActionInput = z.object({ status: z.enum(['draft', 'active', 'paused', 'archived', 'restore']).optional(), confirmed: z.boolean().default(false), expectedUpdatedAt: z.string().datetime().optional() }).strict();
 router.post('/campaigns/:id/status', requireCampaignParam, async (req, res) => {
-  if (!['draft', 'active', 'paused'].includes(req.body?.status)) throw fail('Invalid campaign status.');
-  const campaign = await OutreachCampaign.findOneAndUpdate({ _id: req.params.id, owner: req.user._id }, { $set: { status: req.body.status } }, { new: true });
-  if (!campaign) throw fail('Campaign not found.', 404);
-  res.json({ campaign: campaignResponse(campaign) });
+  const input = campaignActionInput.safeParse(req.body);
+  if (!input.success || !input.data.status) throw fail('Invalid campaign action.');
+  res.json({ campaign: await updateCampaignStatus(req.user._id, req.params.id, input.data) });
+});
+router.delete('/campaigns/:id', requireCampaignParam, async (req, res) => {
+  const input = campaignActionInput.omit({ status: true }).safeParse(req.body);
+  if (!input.success) throw fail('Invalid delete confirmation.');
+  res.json(await deleteDraftCampaign(req.user._id, req.params.id, input.data));
 });
 const scheduleInput = z.object({ ids: z.array(z.string()).min(1).max(500), startAt: z.string().datetime({ offset: true }), intervalMinutes: z.number().min(0).max(1440).default(0), autoFollowup: z.boolean().default(false), confirmCampaignId: z.string().refine(isCampaignId).optional(), sendDate: z.string().datetime({ local: true }).optional() });
 
@@ -302,6 +328,7 @@ router.post('/:publicId/unschedule', async (req, res) => {
 router.patch('/:publicId', async (req, res) => {
   const lead = await OutreachLead.findOne({ owner: req.user._id, publicId: req.params.publicId }).select('+owner');
   if (!lead) throw fail('Contact not found.', 404);
+  if (lead.campaignId && await OutreachCampaign.exists({ _id: lead.campaignId, owner: req.user._id, status: 'archived' })) throw fail('Restore this campaign before editing contacts.', 409);
   const parsed = outreachFields.safeParse(req.body);
   if (!parsed.success) throw fail(parsed.error.issues.map(issue => issue.path.join('.') + ': ' + issue.message).join(' '));
   if (lead.initialState !== 'pending') throw fail('Messages are locked once live sending has been attempted. Use the stop or replied actions.', 409);

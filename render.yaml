@@ -26,6 +26,10 @@ services:
         value: "true"
       - key: OUTREACH_REPLY_TO
         value: temitopekehinde@tkomotions.com
+      - key: OUTREACH_REPLY_FORWARD_TO
+        value: temitopekehinde@tkomotions.com
+      - key: OUTREACH_REPLY_OWNER_EMAIL
+        value: temitopekehinde@tkomotions.com
       - key: OUTREACH_WEBHOOK_SECRET
         sync: false
       - key: OUTREACH_RECEIVING_ENABLED

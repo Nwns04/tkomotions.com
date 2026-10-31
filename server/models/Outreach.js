@@ -5,7 +5,9 @@ import { publicJson } from './modelOptions.js';
 const campaignSchema = new mongoose.Schema({
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, select: false },
   name: { type: String, required: true, trim: true, maxlength: 150 },
-  status: { type: String, enum: ['draft', 'active', 'paused'], default: 'draft' },
+  status: { type: String, enum: ['draft', 'active', 'paused', 'archived'], default: 'draft' },
+  archivedAt: { type: Date, default: null },
+  archivedFromStatus: { type: String, enum: ['draft', 'active', 'paused', null], default: null },
   timezone: { type: String, default: 'Africa/Lagos' },
   setupStep: { type: Number, min: 0, max: 4, default: 1 },
   setupComplete: { type: Boolean, default: false },
@@ -94,3 +96,21 @@ export const OutreachSuppression = mongoose.models.OutreachSuppression || mongoo
 
 const rateSchema = new mongoose.Schema({ key: { type: String, unique: true }, nextAt: Date });
 export const OutreachRate = mongoose.models.OutreachRate || mongoose.model('OutreachRate', rateSchema);
+
+// Received bodies are kept separately from the contact list and loaded on demand.
+const replySchema = new mongoose.Schema({
+  publicId: { type: String, default: () => randomUUID(), unique: true, immutable: true },
+  owner: { type: mongoose.Schema.Types.ObjectId, required: true, select: false },
+  providerId: { type: String, required: true },
+  from: String, subject: String, to: [String], receivedAt: Date,
+  bodyText: { type: String, default: '', select: false },
+  truncated: { type: Boolean, default: false },
+  attachments: [{ _id: false, filename: String, size: Number }],
+  links: [{ _id: false, leadId: String, campaignId: mongoose.Schema.Types.ObjectId, company: String }],
+  matchMethod: { type: String, default: 'unmatched' },
+  forwardState: { type: String, default: 'pending' },
+  forwardMessageId: String, forwardedAt: Date,
+}, { timestamps: true, toJSON: publicJson });
+replySchema.index({ owner: 1, providerId: 1 }, { unique: true });
+replySchema.index({ owner: 1, receivedAt: -1, _id: -1 });
+export const OutreachReply = mongoose.models.OutreachReply || mongoose.model('OutreachReply', replySchema);

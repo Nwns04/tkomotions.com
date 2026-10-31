@@ -104,3 +104,22 @@ test('scheduling workers bound concurrency and await all current writes before r
   }), /Simulated write failure/);
   assert.equal(pending, 0); assert.deepEqual(started, [0, 1, 2, 3, 4, 5]);
 });
+
+import { outreachReplyAddress, signedReplyLead, receivingRecipients, htmlReplyText, quotedReplyTokens } from '../services/outreachReplyContent.js';
+test('reply addresses authenticate the contact and respect receiving address boundaries', () => {
+  const config = { receiving: true, secret: 'synthetic-signing-key', replyTo: 'outreach@replies.example.test', origin: 'https://example.test' };
+  const lead = { _id: '123456789012345678901234' };
+  const address = outreachReplyAddress(lead, config);
+  assert.ok(address.split('@')[0].length <= 64); assert.equal(signedReplyLead([address], config), lead._id);
+  assert.equal(signedReplyLead([address.replace('123456789012345678901234', '123456789012345678901235')], config), null);
+  assert.equal(receivingRecipients(['outreach@replies.example.test.attacker.com'], config).length, 0);
+  assert.equal(receivingRecipients(['outreach-other@replies.example.test'], config).length, 0);
+  assert.equal(outreachReplyAddress(lead, { ...config, receiving: false }), config.replyTo);
+});
+test('HTML-only replies become readable text; matching only trusts original-site contact links', () => {
+  const text = htmlReplyText('<style>hidden</style><p>Ok. Go ahead.</p><script>alert(1)</script><p>A &amp; B &#x1f44d;</p>');
+  assert.match(text, /Ok\. Go ahead\./); assert.match(text, /A & B/); assert.ok(!text.includes('alert(1)')); assert.ok(!text.includes('hidden'));
+  const token = 'a'.repeat(64), config = { origin: 'https://example.test' };
+  assert.deepEqual(quotedReplyTokens('https://evil.test/api/finance/outreach/unsubscribe/' + token, config), []);
+  assert.deepEqual(quotedReplyTokens('https://example.test/api/finance/outreach/unsubscribe/' + token, config), [token]);
+});

@@ -10,8 +10,11 @@ const userSchema = new mongoose.Schema(
     name: { type: String, default: 'TKO Administrator', trim: true, maxlength: 100 },
     active: { type: Boolean, default: true },
     lastLoginAt: Date,
+    accountSource: { type: String, enum: ['legacy', 'public'], default: 'legacy', immutable: true, select: false },
   },
-  { timestamps: true, toJSON: publicJson },
+  { timestamps: true, toJSON: { ...publicJson, transform(document, value) {
+    publicJson.transform(document, value); delete value.accountSource; return value;
+  } } },
 );
 
 export const User = mongoose.model('User', userSchema);

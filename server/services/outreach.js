@@ -1,3 +1,5 @@
+import { receiveOutreachReply } from './outreachReplies.js';
+import { outreachReplyAddress } from './outreachReplyContent.js';
 import { OutreachLead, OutreachCampaign, OutreachEvent, OutreachSuppression, OutreachRate, OutreachLease } from '../models/Outreach.js';
 import { User } from '../models/User.js';
 import { assertSendable, emailSchema, fail, outreachConfig } from './outreachPolicy.js';
@@ -78,6 +80,10 @@ export async function sendOutreach(owner, publicId, { followup = false, step = n
     return { testMode: true };
   }
   if (!config.live) throw fail('Live sending is disabled or the server email configuration is incomplete.', 503);
+  if (lead.campaignId && !automatic) {
+    const campaign = await OutreachCampaign.findOne({ _id: lead.campaignId, owner });
+    if (!campaign || campaign.status !== 'active') throw fail('Activate or resume the campaign before sending emails.', 409);
+  }
   const staff = await User.findById(owner).select('+accountSource');
   if (!staff?.active || staff.accountSource === 'public') throw fail('Staff access is required.', 403);
   if (automatic && stageNumber && !config.autoFollowupReady) throw fail('Automatic follow-ups are not configured.', 503);
@@ -89,10 +95,18 @@ export async function sendOutreach(owner, publicId, { followup = false, step = n
     ...(automatic ? stageNumber === 2 ? { autoFollowup: true, followup2DueAt: { $lte: new Date() } } : stageNumber === 1 ? { autoFollowup: true, followupDueAt: { $lte: new Date() } } : { scheduledAt: { $lte: new Date(), $ne: null } } : {}) };
   lead = await OutreachLead.findOneAndUpdate(query, { $set: { [stage]: 'sending' } }, { new: true }).select('+owner +unsubscribeToken');
   if (!lead) throw fail('This email is already being processed or sending was stopped.', 409);
+  if (lead.campaignId) {
+    const campaign = await OutreachCampaign.findOne({ _id: lead.campaignId, owner });
+    if (!campaign || campaign.status !== 'active') {
+      await OutreachLead.updateOne({ _id: lead._id, [stage]: 'sending' }, { $set: { [stage]: 'pending' } });
+      if (!campaign || campaign.status === 'archived') await releaseOutreachLead(lead);
+      throw fail('Campaign stopped before sending. Review its current status.', 409);
+    }
+  }
   // Once claimed, edits are locked. Ambiguous transport failures require human
   // review rather than an automatic retry after the provider idempotency expires.
   const unsubscribe = new URL('/api/finance/outreach/unsubscribe/' + lead.unsubscribeToken, config.origin).href;
-  const payload = { from: config.from, to: [lead.email], reply_to: config.replyTo,
+  const payload = { from: config.from, to: [lead.email], reply_to: outreachReplyAddress(lead, config),
     subject: stageNumber ? 'Re: ' + lead.subject : lead.subject,
     text: (stageNumber === 2 ? lead.followup2 : stageNumber === 1 ? lead.followup : lead.message) + '\n\nTo stop receiving these emails: ' + unsubscribe,
     headers: { 'List-Unsubscribe': '<' + unsubscribe + '>' } };
@@ -117,14 +131,17 @@ export async function sendOutreach(owner, publicId, { followup = false, step = n
     await OutreachLead.updateOne({ _id: lead._id }, { $set: { ...fields, [stage]: 'accepted' } });
     const schedule = lead.autoFollowup && config.autoFollowupReady;
     await OutreachLead.updateOne({ _id: lead._id, stoppedReason: '', repliedAt: null, optedOutAt: null }, {
-      $set: { status: stageNumber === 2 ? 'followed-up-2' : stageNumber === 1 ? 'followed-up' : 'sent',
-        ...(stageNumber === 0 ? { followupDueAt: schedule && lead.followup ? new Date(now.getTime() + lead.delayDays * 86400000) : null } : {}),
-        ...(stageNumber === 1 ? { followup2DueAt: schedule && lead.followup2 ? new Date(new Date(lead.sentAt).getTime() + lead.followup2DelayDays * 86400000) : null } : {}) },
+      $set: { status: stageNumber === 2 ? 'followed-up-2' : stageNumber === 1 ? 'followed-up' : 'sent' },
     });
-    // Hold the recipient reservation only while a future follow-up is possible.
-    // Follow-up 2 is the last step; release after it. No follow-ups => release now.
-    const moreSteps = stageNumber === 0 ? (schedule && !!lead.followup)
-      : stageNumber === 1 ? (schedule && !!lead.followup2) : false;
+    // Archive disables automation on the stored lead. Do not re-arm a follow-up
+    // using the older snapshot held while an accepted email was in flight.
+    if (schedule && stageNumber < 2) {
+      await OutreachLead.updateOne({ _id: lead._id, autoFollowup: true, stoppedReason: '', repliedAt: null, optedOutAt: null }, {
+        $set: stageNumber === 0 ? { followupDueAt: lead.followup ? new Date(now.getTime() + lead.delayDays * 86400000) : null }
+          : { followup2DueAt: lead.followup2 ? new Date(new Date(lead.sentAt).getTime() + lead.followup2DelayDays * 86400000) : null },
+      });
+    }
+    const moreSteps = await OutreachLead.exists({ _id: lead._id, autoFollowup: true, $or: [{ followupDueAt: { $ne: null } }, { followup2DueAt: { $ne: null } }] });
     if (!moreSteps) await releaseFinishedSequence(lead);
     await outreachLog(lead, stageNumber ? 'followup-' + stageNumber : 'sent', 'Accepted by Resend.');
     return { testMode: false, messageId: result.id };
@@ -138,20 +155,10 @@ export async function sendOutreach(owner, publicId, { followup = false, step = n
   }
 }
 
-export async function handleOutreachEvent(event, config = outreachConfig()) {
+export async function handleOutreachEvent(event, config = outreachConfig(), options = {}) {
   const data = event.data || {};
   if (event.type === 'email.received' && config.receiving) {
-    const from = String(data.from || '').match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0]?.toLowerCase();
-    const recipients = (Array.isArray(data.to) ? data.to : []).map(value => String(value).toLowerCase());
-    if (!from || !recipients.includes(config.replyTo.toLowerCase())) return;
-    // Conservative matching: stop every active outreach to this sender at the
-    // configured receiving address. We do not claim full inbox/thread support.
-    const leads = await OutreachLead.find({ email: from, $or: [{ sentAt: { $ne: null } }, { initialState: 'sending' }], repliedAt: null }).select('+owner');
-    for (const lead of leads) {
-      const updated = await OutreachLead.updateOne({ _id: lead._id, repliedAt: null }, { $set: { repliedAt: new Date(), stoppedReason: 'replied', status: 'replied', followupDueAt: null, followup2DueAt: null } });
-      if (updated.modifiedCount) { await releaseFinishedSequence(lead); await outreachLog(lead, 'reply', 'Reply recorded by receiving webhook.'); }
-    }
-    return;
+    return receiveOutreachReply({ ...data, created_at: data.created_at || event.created_at }, config, options);
   }
   if (!['email.delivered', 'email.bounced', 'email.failed', 'email.complained'].includes(event.type) || typeof data.email_id !== 'string') return;
   const lead = await OutreachLead.findOne({ $or: [{ messageId: data.email_id }, { followupMessageId: data.email_id }, { followup2MessageId: data.email_id }] }).select('+owner');
